@@ -22,13 +22,13 @@
 
 ## 기술 스택
 
-| 영역 | 기술 |
-|---|---|
-| Frontend | Next.js (App Router), TypeScript, Tailwind CSS, Zustand, TanStack Query |
-| Backend | Next.js Route Handlers, Supabase |
-| Testing | Vitest, Playwright, MSW |
-| CI/CD | GitHub Actions, Vercel, Lighthouse CI |
-| Monitoring | Sentry |
+| 영역       | 기술                                                                    |
+| ---------- | ----------------------------------------------------------------------- |
+| Frontend   | Next.js (App Router), TypeScript, Tailwind CSS, Zustand, TanStack Query |
+| Backend    | Next.js Route Handlers, Supabase                                        |
+| Testing    | Vitest, Playwright, MSW                                                 |
+| CI/CD      | GitHub Actions, Vercel, Lighthouse CI                                   |
+| Monitoring | Sentry                                                                  |
 
 ## 문서
 

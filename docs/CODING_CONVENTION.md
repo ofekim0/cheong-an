@@ -38,33 +38,33 @@ src/
 
 ### 파일/폴더
 
-| 대상 | 규칙 | 예시 |
-|---|---|---|
-| 컴포넌트 파일 | PascalCase | `AnnouncementCard.tsx` |
-| 훅 파일 | camelCase, use 접두사 | `useAnnouncementFilter.ts` |
-| 유틸리티 파일 | camelCase | `parseMainPage.ts` |
-| 타입 파일 | camelCase | `announcement.ts` |
-| 상수 파일 | camelCase | `districts.ts` |
-| 테스트 파일 | 원본파일명.test.ts(x) | `parseMainPage.test.ts` |
+| 대상          | 규칙                  | 예시                       |
+| ------------- | --------------------- | -------------------------- |
+| 컴포넌트 파일 | PascalCase            | `AnnouncementCard.tsx`     |
+| 훅 파일       | camelCase, use 접두사 | `useAnnouncementFilter.ts` |
+| 유틸리티 파일 | camelCase             | `parseMainPage.ts`         |
+| 타입 파일     | camelCase             | `announcement.ts`          |
+| 상수 파일     | camelCase             | `districts.ts`             |
+| 테스트 파일   | 원본파일명.test.ts(x) | `parseMainPage.test.ts`    |
 
 ### 변수/함수
 
-| 대상 | 규칙 | 예시 |
-|---|---|---|
-| 변수, 함수 | camelCase | `boardId`, `fetchAnnouncement()` |
-| 상수 | UPPER_SNAKE_CASE | `MAX_RETRY_COUNT`, `CRAWL_INTERVAL_MS` |
-| 컴포넌트 | PascalCase | `AnnouncementCard` |
-| 타입, 인터페이스 | PascalCase | `Announcement`, `CrawlResult` |
-| 제네릭 타입 파라미터 | T 접두사 또는 의미있는 이름 | `TData`, `TError` |
+| 대상                 | 규칙                        | 예시                                   |
+| -------------------- | --------------------------- | -------------------------------------- |
+| 변수, 함수           | camelCase                   | `boardId`, `fetchAnnouncement()`       |
+| 상수                 | UPPER_SNAKE_CASE            | `MAX_RETRY_COUNT`, `CRAWL_INTERVAL_MS` |
+| 컴포넌트             | PascalCase                  | `AnnouncementCard`                     |
+| 타입, 인터페이스     | PascalCase                  | `Announcement`, `CrawlResult`          |
+| 제네릭 타입 파라미터 | T 접두사 또는 의미있는 이름 | `TData`, `TError`                      |
 
 ### 이벤트 핸들러
 
 ```typescript
 // props: on + 동사
-onSubmit, onClick, onChange
+(onSubmit, onClick, onChange);
 
 // handler 함수: handle + 동사
-handleSubmit, handleClick, handleFilterChange
+(handleSubmit, handleClick, handleFilterChange);
 ```
 
 ---
@@ -203,12 +203,12 @@ describe('parseMainPage', () => {
 
 ### 무엇을 테스트하는가
 
-| 반드시 테스트 | 테스트 안 해도 됨 |
-|---|---|
-| 크롤링 파서 (핵심 비즈니스 로직) | UI 스타일링 |
-| boardId 감지 / 누락 방지 로직 | 외부 라이브러리 동작 |
-| 알림 필터 매칭 로직 | 단순 데이터 패스스루 |
-| API Route 핸들러 | |
+| 반드시 테스트                    | 테스트 안 해도 됨    |
+| -------------------------------- | -------------------- |
+| 크롤링 파서 (핵심 비즈니스 로직) | UI 스타일링          |
+| boardId 감지 / 누락 방지 로직    | 외부 라이브러리 동작 |
+| 알림 필터 매칭 로직              | 단순 데이터 패스스루 |
+| API Route 핸들러                 |                      |
 
 ---
 
