@@ -123,29 +123,17 @@ cheong-an/
 
 ## 5. 다음 단계 (Claude Code가 해야 할 것)
 
-### Step 2: 프로젝트 초기화 ← 지금 여기부터
+### Step 2: 프로젝트 초기화 (대부분 완료)
 
-1. **Next.js App Router 프로젝트 생성**
-   - `pnpm create next-app` (App Router, TypeScript, Tailwind CSS, ESLint 선택)
-   - src/ 디렉토리 사용
-   - import alias `@/` 설정
-
-2. **Prettier 설정**
-   - prettier + prettier-plugin-tailwindcss 설치
-   - ESLint와 Prettier 충돌 방지 설정 (eslint-config-prettier)
-
-3. **husky + lint-staged 설정**
-   - 커밋 전 lint + format 자동 실행
-
-4. **Vitest + Playwright 초기 설정**
-   - Vitest: 빈 테스트라도 실행 가능한 상태
-   - Playwright: 설치 + 기본 설정
-
-5. **ADR 001 작성**
+1. ~~**Next.js App Router 프로젝트 생성**~~ ✅
+2. ~~**Prettier 설정**~~ ✅
+3. ~~**husky + lint-staged 설정**~~ ✅
+4. ~~**Vitest + Playwright 초기 설정**~~ ✅
+5. **ADR 001 작성** ← 미완료
    - `docs/adr/001-tech-stack.md` — 기술 스택 선정 근거
    - ADR_TEMPLATE.md를 복사해서 작성
 
-### Step 3: Vercel 연동 + CI
+### Step 3: Vercel 연동 + CI ← 지금 여기부터
 
 - Vercel에 레포 연결, 프리뷰 배포 확인
 - GitHub Actions: lint + 타입 체크 + 테스트 파이프라인
