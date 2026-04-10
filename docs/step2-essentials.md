@@ -19,12 +19,12 @@
 
 ### dependencies vs devDependencies
 
-|               | dependencies      | devDependencies          |
-| ------------- | ----------------- | ------------------------ |
-| 용도          | 앱 실행에 필요    | 개발/빌드에만 필요       |
-| 프로덕션 포함 | Yes               | No                       |
-| 예시          | react, next, clsx | eslint, vitest, prettier |
-| 설치 명령     | `pnpm add <pkg>`  | `pnpm add -D <pkg>`      |
+|               | dependencies            | devDependencies              |
+| ------------- | ----------------------- | ---------------------------- |
+| 용도          | 앱 실행에 필요한 패키지 | 개발/빌드에만 필요 한 패키지 |
+| 프로덕션 포함 | Yes                     | No                           |
+| 예시          | react, next, clsx       | eslint, vitest, prettier     |
+| 설치 명령     | `pnpm add <pkg>`        | `pnpm add -D <pkg>`          |
 
 잘못 분류하면 프로덕션 번들이 불필요하게 커지거나, 빌드 시 패키지를 못 찾을 수 있다.
 
