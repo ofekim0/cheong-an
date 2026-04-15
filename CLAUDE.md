@@ -14,8 +14,7 @@ GitHub: `ofekim0/cheong-an` (Public, MIT)
 ### 현재 진행 상황
 
 - **Phase 0 (프로젝트 셋업)**: 완료 — Next.js, ESLint, Vitest, CI/CD 구축
-- **Phase 1 Sprint 1 (크롤링 파이프라인)**: 진행 중 — 파서 레이어 + DB 스키마 PR 리뷰 대기(#15), 서비스 레이어/Supabase 연동/스케줄러 예정
-- 상세: `HANDOFF.md` "0. 최신 상태"
+- **Phase 1 Sprint 1 (크롤링 파이프라인)**: 진행 예정
 
 ## 기술 스택
 
@@ -133,16 +132,6 @@ Issue 생성 → 브랜치 생성 → 구현 → 테스트 작성 → PR → 리
 ### PR 작성 시
 
 PR 생성을 요청받으면 `.github/pull_request_template.md` 양식에 맞춰 작성한다.
-
-### 진행 상황 갱신 권유
-
-PR을 생성(`gh pr create`)하거나 머지(`gh pr merge`)한 직후, 또는 사용자가 직접 머지한 사실을 세션 중 인지한 직후에 권유한다.
-
-다음 상황에서 권유: "진행 상황이 변경되었습니다. CLAUDE.md '현재 진행 상황' / HANDOFF.md '0. 최신 상태'를 갱신할까요?"
-
-- 새 PR이 생성되어 리뷰 대기 상태가 된 경우
-- PR이 머지되어 Step/Phase의 산출물이 추가된 경우
-- 현재 Step의 잔여 작업 목록이 변동된 경우 (완료 항목 추가 또는 새 항목 발견)
 
 ### 학습 정리 문서 권유
 
