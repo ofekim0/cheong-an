@@ -5,6 +5,17 @@
 청안(cheong-an) — 청년안심주택 새 공고 알림 서비스. 모집공고 모니터링 + 웹 푸시 알림.
 GitHub: `ofekim0/cheong-an` (Public, MIT)
 
+### 목적
+
+- 자기계발용 포트폴리오 (1순위) + 본인 실사용 서비스
+- 기존에 청년안심주택 전용 알림 서비스가 없어서 직접 만드는 프로젝트
+- 상세: `docs/PROJECT_PLAN.md`
+
+### 현재 진행 상황
+
+- **Phase 0 (프로젝트 셋업)**: 완료 — Next.js, ESLint, Vitest, CI/CD 구축
+- **Phase 1 Sprint 1 (크롤링 파이프라인)**: 진행 예정
+
 ## 기술 스택
 
 - **프론트엔드**: Next.js (App Router), TypeScript, Tailwind CSS, Zustand, TanStack Query
