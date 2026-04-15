@@ -1,7 +1,45 @@
 # HANDOFF: 청안 프로젝트 — Claude Code 인계 문서
 
 > 이 문서는 Claude.ai에서 진행한 기획/의사결정 세션의 결과물입니다.
-> Claude Code는 이 문서를 기반으로 **Step 2: 프로젝트 초기화**부터 시작하면 됩니다.
+> **2~10장은 Step 1 인계 시점의 스냅샷**이며, 이후 진척은 아래 "0. 최신 상태"에 갱신합니다.
+
+---
+
+## 0. 최신 상태 (2026-04-15 기준)
+
+### 완료된 Step
+
+| Step    | 내용                                                          | 산출물                                                   |
+| ------- | ------------------------------------------------------------- | -------------------------------------------------------- |
+| Step 2  | Next.js 초기화, Prettier/husky/lint-staged, Vitest/Playwright | `docs/step2-essentials.md`, `docs/step2-project-init.md` |
+| Step 3  | Vercel 연동, GitHub Actions CI (lint + 타입 체크 + 테스트)    | `docs/step3-ci-setup.md`                                 |
+| ADR 001 | 기술 스택 선정 근거 문서화                                    | `docs/adr/001-tech-stack.md`                             |
+
+### 진행 중: Step 4 — 크롤링 파이프라인 (`feat/crawling-pipeline`)
+
+- **DB 스키마**: `supabase/migrations/00001_create_announcements.sql` — `announcements` 테이블 확정
+- **타입 정의**: `src/types/announcement.ts`
+- **파서 레이어** (`src/lib/crawler/`, 순수 함수 + 테스트 완비):
+  - `parseMainPage.ts` — 메인 페이지에서 최신 5건의 `boardId`/제목/날짜 추출
+  - `parseDetailPage.ts` — `view.do?boardId=N` 상세 페이지 전체 필드 파싱
+  - `checkBoardId.ts` — 범위 채우기 감지 로직 (`findNewBoardIds`, `separateKnownAndUnknown`)
+- **설계 문서**: `docs/step4-crawling.md` — cheerio 사용법, 범위 채우기 전략, 레이어 분리 근거
+
+### 다음 할 일 (Step 4 잔여)
+
+1. **서비스 레이어**: HTTP fetch + 재시도 + rate limit (파서 ↔ 네트워크 분리)
+2. **상세 페이지 검증 로직**: `needsVerification` ID를 실제 fetch하여 존재 여부 확인
+3. **Supabase 연동**: 파싱 결과 저장 + `lastBoardId` 추적
+4. **스케줄러**: Vercel Cron 또는 GitHub Actions로 주기 실행 (1시간 간격)
+
+### CLAUDE.md 행동 지침 (HANDOFF 이후 추가됨)
+
+작업 중 자동 실행하지 말고 **권유만** 해야 하는 항목:
+
+- ADR 작성 (라이브러리 도입, 아키텍처 변경, 트레이드오프 판단 시)
+- GitHub Issue 생성 (기능/버그 착수 전)
+- 학습 정리 문서 `docs/stepN-*.md` (PR 생성 시 새 기술 개념이 있으면)
+- 스프린트 회고 (마일스톤/2주 경계)
 
 ---
 
