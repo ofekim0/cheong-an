@@ -4,3 +4,6 @@ out
 build
 coverage
 pnpm-lock.yaml
+
+# 크롤링 테스트 fixture는 원본 HTML 그대로 유지
+src/lib/crawler/__fixtures__/
