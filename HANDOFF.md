@@ -15,7 +15,7 @@
 | Step 3  | Vercel 연동, GitHub Actions CI (lint + 타입 체크 + 테스트)    | `docs/step3-ci-setup.md`                                 |
 | ADR 001 | 기술 스택 선정 근거 문서화                                    | `docs/adr/001-tech-stack.md`                             |
 
-### 진행 중: Step 4 — 크롤링 파이프라인 (`feat/crawling-pipeline`)
+### 진행 중: Step 4 — 크롤링 파이프라인 (`feat/crawling-pipeline`, PR #15 리뷰 대기)
 
 - **DB 스키마**: `supabase/migrations/00001_create_announcements.sql` — `announcements` 테이블 확정
 - **타입 정의**: `src/types/announcement.ts`
