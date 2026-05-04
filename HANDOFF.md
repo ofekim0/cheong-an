@@ -5,7 +5,7 @@
 
 ---
 
-## 0. 최신 상태 (2026-04-24 기준)
+## 0. 최신 상태 (2026-05-04 기준)
 
 ### 완료된 Step
 
@@ -14,18 +14,18 @@
 | Step 2   | Next.js 초기화, Prettier/husky/lint-staged, Vitest/Playwright         | `docs/step2-essentials.md`, `docs/step2-project-init.md`                                                                                                                                          |
 | Step 3   | Vercel 연동, GitHub Actions CI (lint + 타입 체크 + 테스트)            | `docs/step3-ci-setup.md`                                                                                                                                                                          |
 | Step 4   | 크롤링 파서 레이어 + DB 스키마 + 타입 (`feat/crawling-pipeline` 머지) | `src/lib/crawler/parseMainPage.ts`, `parseDetailPage.ts`, `checkBoardId.ts` + 테스트, `supabase/migrations/00001_create_announcements.sql`, `src/types/announcement.ts`, `docs/step4-crawling.md` |
-| Step 5-a | HTTP fetch + 재시도 유틸리티 (Sprint 1 서비스 레이어 1/2)             | `src/lib/crawler/fetchHtml.ts`, `retry.ts`, `docs/step5-fetch-html.md`, `docs/step5-retry.md`                                                                                                     |
+| Step 5-a | HTTP fetch + 재시도 유틸리티                                          | `src/lib/crawler/fetchHtml.ts`, `retry.ts`, `docs/step5-fetch-html.md`, `docs/step5-retry.md`                                                                                                     |
+| Step 5-b | rateLimit (요청 간격 제어, 단일 프로세스 큐)                          | `src/lib/crawler/rateLimit.ts`, `docs/step5-rate-limit.md`                                                                                                                                        |
+| Step 5-c | announcementService 합성 레이어 (fetch+retry+rateLimit+파서 조합)     | `src/lib/crawler/announcementService.ts`, `docs/step5-service-layer.md`                                                                                                                           |
 | ADR 001  | 기술 스택 선정 근거 문서화                                            | `docs/adr/001-tech-stack.md`                                                                                                                                                                      |
 
 ### 진행 중: Sprint 1 서비스 레이어 마무리 (`feat/crawler-service-layer`)
 
-- 🔄 `rateLimit` — 요청 간격 제어 (tmp 단계, `docs/step5-rate-limit.md` 초안 완료)
-- ⏳ `announcementService` — fetch + retry + rateLimit + 파서 조합 레이어
-- ⏳ MSW 기반 통합 테스트
+- ⏳ MSW 기반 통합 테스트 — `crawlNewAnnouncements` 6개 시나리오 (정상 / 메인 빈 결과 / 일부 404 / 전부 404 / retry 성공 / retry 소진)
 
 ### 다음 할 일 (Sprint 1 잔여)
 
-1. **서비스 레이어 완성** (현재): rateLimit → announcementService → MSW 테스트
+1. **MSW 통합 테스트** (현재): `announcementService.test.ts` 작성
 2. **상세 페이지 검증 로직**: `needsVerification` ID를 실제 fetch하여 존재 여부 확인
 3. **Supabase 연동**: 파싱 결과 저장 + `lastBoardId` 추적
 4. **스케줄러**: Vercel Cron 또는 GitHub Actions로 주기 실행 (1시간 간격)
