@@ -5,7 +5,7 @@
 
 ---
 
-## 0. 최신 상태 (2026-05-04 기준)
+## 0. 최신 상태 (2026-05-19 기준)
 
 ### 완료된 Step
 
@@ -17,18 +17,18 @@
 | Step 5-a | HTTP fetch + 재시도 유틸리티                                          | `src/lib/crawler/fetchHtml.ts`, `retry.ts`, `docs/step5-fetch-html.md`, `docs/step5-retry.md`                                                                                                     |
 | Step 5-b | rateLimit (요청 간격 제어, 단일 프로세스 큐)                          | `src/lib/crawler/rateLimit.ts`, `docs/step5-rate-limit.md`                                                                                                                                        |
 | Step 5-c | announcementService 합성 레이어 (fetch+retry+rateLimit+파서 조합)     | `src/lib/crawler/announcementService.ts`, `docs/step5-service-layer.md`                                                                                                                           |
+| Step 5-d | MSW 기반 announcementService 통합 테스트 (6개 시나리오)               | `src/lib/crawler/announcementService.test.ts`, `docs/step5-msw-testing.md`                                                                                                                        |
 | ADR 001  | 기술 스택 선정 근거 문서화                                            | `docs/adr/001-tech-stack.md`                                                                                                                                                                      |
 
-### 진행 중: Sprint 1 서비스 레이어 마무리 (`feat/crawler-service-layer`)
+### 진행 중: Sprint 1 잔여 (`feat/crawler-service-layer`)
 
-- ⏳ MSW 기반 통합 테스트 — `crawlNewAnnouncements` 6개 시나리오 (정상 / 메인 빈 결과 / 일부 404 / 전부 404 / retry 성공 / retry 소진)
+서비스 레이어 + 통합 테스트까지 마무리됨. 다음 단계는 아래.
 
 ### 다음 할 일 (Sprint 1 잔여)
 
-1. **MSW 통합 테스트** (현재): `announcementService.test.ts` 작성
-2. **상세 페이지 검증 로직**: `needsVerification` ID를 실제 fetch하여 존재 여부 확인
-3. **Supabase 연동**: 파싱 결과 저장 + `lastBoardId` 추적
-4. **스케줄러**: Vercel Cron 또는 GitHub Actions로 주기 실행 (1시간 간격)
+1. **상세 페이지 검증 로직**: `needsVerification` ID를 실제 fetch하여 존재 여부 확인
+2. **Supabase 연동**: 파싱 결과 저장 + `lastBoardId` 추적
+3. **스케줄러**: Vercel Cron 또는 GitHub Actions로 주기 실행 (1시간 간격)
 
 ### 용어 매핑
 
