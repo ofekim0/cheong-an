@@ -15,7 +15,7 @@ GitHub: `ofekim0/cheong-an` (Public, MIT)
 
 - **Phase 0 (프로젝트 셋업)**: 완료 — Next.js, ESLint, Vitest, CI/CD 구축
 - **Phase 1 Sprint 1 (크롤링 파이프라인)**: 진행 중
-  - 완료: 파서 레이어(`src/lib/crawler/` — `parseMainPage`, `parseDetailPage`, `checkBoardId` + 단위 테스트), `announcements` 테이블 마이그레이션(`supabase/migrations/00001_create_announcements.sql`), 타입 정의(`src/types/announcement.ts`), 학습 정리(`docs/step4-crawling.md`)
+  - 완료: 파서 레이어(`src/lib/crawler/` — `parseMainPage`, `parseDetailPage`, `checkBoardId` + 단위 테스트), `announcements` 테이블 마이그레이션(`supabase/migrations/00001_create_announcements.sql`), 타입 정의(`src/types/announcement.ts`), 학습 정리(`docs/learning/step4-crawling.md`)
   - 잔여: ① 서비스 레이어(HTTP fetch + 재시도 + rate limit) ② 상세 페이지 검증 로직(`needsVerification` 실제 fetch) ③ Supabase 연동(저장 + `lastBoardId` 추적) ④ 스케줄러(Vercel Cron / GitHub Actions, 1시간 간격)
 - **Phase 1 Sprint 2 (알림 시스템 + 기본 UI)**: 미착수
 
@@ -150,8 +150,8 @@ PR 생성 시, 해당 브랜치에서 새로 도입하거나 사용한 기술 �
 - 새 라이브러리나 외부 API를 처음 연동했을 때
 - 새로운 아키텍처 패턴이나 설계 방식을 적용했을 때
 - 인프라/배포/CI 설정을 변경했을 때
-- 파일명 형식: `docs/stepN-*.md` (예: `docs/step4-crawling.md`)
-- 참고: 기존 학습 정리 문서 `docs/step2-essentials.md`, `docs/step3-ci-setup.md`
+- 파일명 형식: `docs/learning/stepN-*.md` (예: `docs/learning/step4-crawling.md`)
+- 참고: 기존 학습 정리 문서 `docs/learning/step2-essentials.md`, `docs/learning/step3-ci-setup.md`
 
 ### 스프린트 회고 권유
 
