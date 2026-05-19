@@ -11,12 +11,17 @@ GitHub: `ofekim0/cheong-an` (Public, MIT)
 - 기존에 청년안심주택 전용 알림 서비스가 없어서 직접 만드는 프로젝트
 - 상세: `docs/PROJECT_PLAN.md`
 
-### 현재 진행 상황 (2026-04-15 기준)
+### 현재 진행 상황 (2026-05-19 기준)
 
 - **Phase 0 (프로젝트 셋업)**: 완료 — Next.js, ESLint, Vitest, CI/CD 구축
 - **Phase 1 Sprint 1 (크롤링 파이프라인)**: 진행 중
-  - 완료: 파서 레이어(`src/lib/crawler/` — `parseMainPage`, `parseDetailPage`, `checkBoardId` + 단위 테스트), `announcements` 테이블 마이그레이션(`supabase/migrations/00001_create_announcements.sql`), 타입 정의(`src/types/announcement.ts`), 학습 정리(`docs/learning/step4-crawling.md`)
-  - 잔여: ① 서비스 레이어(HTTP fetch + 재시도 + rate limit) ② 상세 페이지 검증 로직(`needsVerification` 실제 fetch) ③ Supabase 연동(저장 + `lastBoardId` 추적) ④ 스케줄러(Vercel Cron / GitHub Actions, 1시간 간격)
+  - 완료:
+    - 파서 레이어 (`parseMainPage`, `parseDetailPage`, `checkBoardId` + 단위 테스트)
+    - `announcements` 테이블 마이그레이션 (`supabase/migrations/00001_create_announcements.sql`), 타입 정의 (`src/types/announcement.ts`)
+    - 서비스 레이어 (`fetchHtml`, `retry`, `rateLimit`, `announcementService` + MSW 통합 테스트)
+    - 학습 정리 문서는 `docs/learning/` 하위 (`step4-crawling.md`, `step5-fetch-html.md`, `step5-retry.md`, `step5-rate-limit.md`, `step5-service-layer.md`, `step5-msw-testing.md`)
+  - 잔여: ① 상세 페이지 검증 로직(`needsVerification` 실제 fetch) ② Supabase 연동(저장 + `lastBoardId` 추적) ③ 스케줄러(Vercel Cron / GitHub Actions, 1시간 간격)
+  - 상세 진척과 인계 컨텍스트는 `HANDOFF.md` § 0 참고
 - **Phase 1 Sprint 2 (알림 시스템 + 기본 UI)**: 미착수
 
 ## 기술 스택
