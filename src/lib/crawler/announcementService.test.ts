@@ -103,9 +103,9 @@ describe('crawlNewAnnouncements', () => {
 
     const result = await crawlNewAnnouncements({ ...FAST, lastBoardId: 97 });
 
-    expect(result.newAnnouncements.map((a) => a.boardId).sort()).toEqual([
-      98, 99, 100,
-    ]);
+    expect(
+      result.newAnnouncements.map((a) => a.boardId).sort((a, b) => a - b),
+    ).toEqual([98, 99, 100]);
     expect(result.latestBoardId).toBe(100);
     expect(result.skippedBoardIds).toEqual([]);
   });
@@ -128,9 +128,9 @@ describe('crawlNewAnnouncements', () => {
 
     const result = await crawlNewAnnouncements({ ...FAST, lastBoardId: 96 });
 
-    expect(result.newAnnouncements.map((a) => a.boardId).sort()).toEqual([
-      97, 99, 100,
-    ]);
+    expect(
+      result.newAnnouncements.map((a) => a.boardId).sort((a, b) => a - b),
+    ).toEqual([97, 99, 100]);
     expect(result.skippedBoardIds).toEqual([98]);
     expect(result.latestBoardId).toBe(100);
   });
