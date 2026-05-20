@@ -14,6 +14,26 @@ export interface AnnouncementSummary {
   postDate: string; // YYYY-MM-DD
 }
 
+/** 목록 JSON API 응답 1건의 파싱 결과 (boardId 단위 raw 데이터) */
+export interface AnnouncementListItem {
+  boardId: number;
+  title: string;
+  announcementType: AnnouncementType;
+  recruitmentType: RecruitmentType;
+  /** 사업 주체 (예: "태운산업개발(주)") */
+  agency: string | null;
+  /** 게시일 (KST 기준 YYYY-MM-DD) */
+  postDate: string;
+  /** 모집 시작일 (YYYY-MM-DD) */
+  applicationStartDate: string | null;
+  /** 모집 마감일 (YYYY-MM-DD) */
+  applicationEndDate: string | null;
+  /** 첨부 파일 ID — view.do에서 다운로드 URL 구성에 사용 */
+  attachmentId: string | null;
+  /** HTML 본문 (sanitize 전) */
+  rawContent: string;
+}
+
 /** 상세 페이지에서 추출한 공고 전체 정보 */
 export interface AnnouncementDetail {
   boardId: number;
