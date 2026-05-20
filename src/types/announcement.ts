@@ -7,13 +7,6 @@ export type RecruitmentType = 'initial' | 'additional';
 /** 공고 상태 */
 export type AnnouncementStatus = 'upcoming' | 'open' | 'closed';
 
-/** 메인 페이지에서 추출한 공고 요약 정보 */
-export interface AnnouncementSummary {
-  boardId: number;
-  title: string;
-  postDate: string; // YYYY-MM-DD
-}
-
 /** 목록 JSON API 응답 1건의 파싱 결과 (boardId 단위 raw 데이터) */
 export interface AnnouncementListItem {
   boardId: number;
