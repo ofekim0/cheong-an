@@ -2,6 +2,14 @@
 
 > 선행: [step5-service-layer.md](./step5-service-layer.md)
 
+> 📌 **epic #19 이후 보강 — 본문 핵심은 여전히 유효합니다.**
+>
+> - **§4 픽스처 (`buildMainHtml`)는 폐기**. 메인 페이지 HTML 파싱을 그만뒀기 때문. 대신 실제 사이트 응답을 그대로 박제한 fixture를 단위 테스트와 통합 테스트가 공유합니다 (`__fixtures__/listJson.json`, `detailPage.html`, `viewErrorPage.html`).
+> - **§5 시나리오 표는 확장**됨. JSON 응답 → gap 메우기 → view.do 보강 분기에 따라 10개 시나리오로 늘어났고, `http.post`(JSON 호출)와 `http.get`(view.do)을 함께 등록합니다.
+> - **새 패턴 도입**: 시나리오마다 "어떤 boardId가 빈 번호인지" 다르게 표현하기 위해 `viewHandler(errorIds: number[])` 팩토리를 추가했습니다.
+>
+> §1 (MSW vs fetcher mock), §2 (셋업), §3 (가짜 시계로 시간 의존부 제거), §6 (한계)의 핵심 의도는 그대로입니다. 자세한 재설계 맥락은 [step6-data-source-redesign.md](./step6-data-source-redesign.md) 참고.
+
 `crawlNewAnnouncements`는 fetch · retry · rateLimit · 파서 네 모듈을 합성한다. 단위 테스트로는 합성 자체가 의도대로 작동하는지 확인할 수 없다. **HTTP 경계에서 가로채는 통합 테스트**가 필요하다 — MSW가 그 도구.
 
 ## 1. 왜 MSW인가 — fetcher mock과의 차이
