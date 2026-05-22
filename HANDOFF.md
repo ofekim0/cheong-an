@@ -5,30 +5,31 @@
 
 ---
 
-## 0. 최신 상태 (2026-05-19 기준)
+## 0. 최신 상태 (2026-05-22 기준)
 
 ### 완료된 Step
 
-| Step     | 내용                                                                  | 산출물                                                                                                                                                                                                     |
-| -------- | --------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Step 2   | Next.js 초기화, Prettier/husky/lint-staged, Vitest/Playwright         | `docs/learning/step2-essentials.md`, `docs/learning/step2-project-init.md`                                                                                                                                 |
-| Step 3   | Vercel 연동, GitHub Actions CI (lint + 타입 체크 + 테스트)            | `docs/learning/step3-ci-setup.md`                                                                                                                                                                          |
-| Step 4   | 크롤링 파서 레이어 + DB 스키마 + 타입 (`feat/crawling-pipeline` 머지) | `src/lib/crawler/parseMainPage.ts`, `parseDetailPage.ts`, `checkBoardId.ts` + 테스트, `supabase/migrations/00001_create_announcements.sql`, `src/types/announcement.ts`, `docs/learning/step4-crawling.md` |
-| Step 5-a | HTTP fetch + 재시도 유틸리티                                          | `src/lib/crawler/fetchHtml.ts`, `retry.ts`, `docs/learning/step5-fetch-html.md`, `docs/learning/step5-retry.md`                                                                                            |
-| Step 5-b | rateLimit (요청 간격 제어, 단일 프로세스 큐)                          | `src/lib/crawler/rateLimit.ts`, `docs/learning/step5-rate-limit.md`                                                                                                                                        |
-| Step 5-c | announcementService 합성 레이어 (fetch+retry+rateLimit+파서 조합)     | `src/lib/crawler/announcementService.ts`, `docs/learning/step5-service-layer.md`                                                                                                                           |
-| Step 5-d | MSW 기반 announcementService 통합 테스트 (6개 시나리오)               | `src/lib/crawler/announcementService.test.ts`, `docs/learning/step5-msw-testing.md`                                                                                                                        |
-| ADR 001  | 기술 스택 선정 근거 문서화                                            | `docs/adr/001-tech-stack.md`                                                                                                                                                                               |
+| Step     | 내용                                                                                            | 산출물                                                                                                                                                                                                                                                                                                                   |
+| -------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Step 2   | Next.js 초기화, Prettier/husky/lint-staged, Vitest/Playwright                                   | `docs/learning/step2-essentials.md`, `docs/learning/step2-project-init.md`                                                                                                                                                                                                                                               |
+| Step 3   | Vercel 연동, GitHub Actions CI (lint + 타입 체크 + 테스트)                                      | `docs/learning/step3-ci-setup.md`                                                                                                                                                                                                                                                                                        |
+| Step 4   | 크롤링 파서 레이어 + DB 스키마 + 타입 (`feat/crawling-pipeline` 머지)                           | `src/lib/crawler/parseDetailPage.ts` + 테스트, `supabase/migrations/00001_create_announcements.sql`, `src/types/announcement.ts`, `docs/learning/step4-crawling.md` (※ `parseMainPage.ts`, `checkBoardId.ts`는 Step 6에서 폐기)                                                                                          |
+| Step 5-a | HTTP fetch + 재시도 유틸리티                                                                    | `src/lib/crawler/fetchHtml.ts`, `retry.ts`, `docs/learning/step5-fetch-html.md`, `docs/learning/step5-retry.md`                                                                                                                                                                                                          |
+| Step 5-b | rateLimit (요청 간격 제어, 단일 프로세스 큐)                                                    | `src/lib/crawler/rateLimit.ts`, `docs/learning/step5-rate-limit.md`                                                                                                                                                                                                                                                      |
+| Step 5-c | announcementService 합성 레이어 (fetch+retry+rateLimit+파서 조합)                               | `src/lib/crawler/announcementService.ts`, `docs/learning/step5-service-layer.md`                                                                                                                                                                                                                                         |
+| Step 5-d | MSW 기반 announcementService 통합 테스트                                                        | `src/lib/crawler/announcementService.test.ts`, `docs/learning/step5-msw-testing.md`                                                                                                                                                                                                                                      |
+| Step 6   | 데이터 소스 재설계: JSON API(주) + view.do(gap 보강) 하이브리드 (epic #19, PR #20~23, #25 머지) | `src/lib/crawler/parseListJson.ts`, `fetchJsonText.ts`, `isViewErrorPage.ts`, `announcementService.ts` 재작성, `__fixtures__/{listJson.json,viewErrorPage.html,detailPage.html}` 실 응답 박제, `docs/learning/step6-data-source-redesign.md`. 기존 `parseMainPage.ts`/`checkBoardId.ts` 폐기. 단위·통합 테스트 58개 그린 |
+| ADR 001  | 기술 스택 선정 근거 문서화                                                                      | `docs/adr/001-tech-stack.md`                                                                                                                                                                                                                                                                                             |
+| ADR 002  | 크롤링 데이터 소스 전략 — 옵션 비교 + C(하이브리드) 채택                                        | `docs/adr/002-crawling-data-source.md`                                                                                                                                                                                                                                                                                   |
 
-### 진행 중: Sprint 1 잔여 (`feat/crawler-service-layer`)
+### 진행 중: Sprint 1 잔여
 
-서비스 레이어 + 통합 테스트까지 마무리됨. 다음 단계는 아래.
+크롤링 파이프라인 본체(데이터 소스 재설계 포함)는 마무리됨. 다음은 저장과 트리거.
 
 ### 다음 할 일 (Sprint 1 잔여)
 
-1. **상세 페이지 검증 로직**: `needsVerification` ID를 실제 fetch하여 존재 여부 확인
-2. **Supabase 연동**: 파싱 결과 저장 + `lastBoardId` 추적
-3. **스케줄러**: Vercel Cron 또는 GitHub Actions로 주기 실행 (1시간 간격)
+1. **Supabase 연동** (이슈 #12): 파싱 결과 저장 + `lastBoardId` 추적
+2. **스케줄러** (이슈 #13): Vercel Cron 또는 GitHub Actions로 주기 실행 (1시간 간격)
 
 ### 용어 매핑
 
