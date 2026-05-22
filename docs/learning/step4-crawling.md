@@ -2,6 +2,21 @@
 
 > Step 4에서 수행한 작업과, 각 작업이 의미하는 것을 정리한 문서.
 
+> ⚠️ **이 문서의 일부 섹션은 epic [#19](https://github.com/ofekim0/cheong-an/issues/19) (2026-05-22 머지) 이후 폐기됨.**
+>
+> 청년안심주택 사이트의 실제 데이터 소스를 재발견한 결과, 메인 페이지 HTML 파싱 전략을 폐기하고 JSON API + view.do 하이브리드 구조로 재설계했습니다. 다음 섹션이 가장 크게 영향받습니다:
+>
+> - §1 작업 요약 표 — `parseMainPage.ts`, `checkBoardId.ts` 삭제
+> - §2.5 SSR vs CSR — 청안 메인 페이지는 사실 CSR(JSON API)
+> - §6 cheerio 선택 이유 — 메인은 더 이상 cheerio가 아닌 JSON 파싱
+> - §7 크롤링 대상 사이트 분석 — 페이지별 렌더링 분류 정정 필요
+> - §8 메인 페이지 파서 설계 — 통째로 폐기
+> - §10 boardId 연속성 체크 — 알고리즘 의도는 유효하나 구현 위치/형태가 달라짐
+>
+> §3 (cheerio 기초), §4 (Vitest 기초), §5 (DB 기초), §9 (상세 페이지 파서)는 현재도 유효합니다.
+>
+> 재설계 학습은 [step6-data-source-redesign.md](./step6-data-source-redesign.md) 참고. 이 문서는 그 시점의 사고 흐름을 박제로 보존합니다.
+
 ---
 
 ## 목차
@@ -509,6 +524,9 @@ $('li').text(); // 'Hello'
 
 ## 8. 메인 페이지 파서 설계
 
+> ⚠️ **이 섹션은 epic #19 이후 통째로 폐기됨.**
+> 메인 페이지(`main.do`)의 `ul.mainBoard_list`는 실제로는 페이지 로드 후 JS가 비워버립니다. 페칭 시점엔 데이터가 있는 것처럼 보이지만 사용자가 보는 실제 데이터는 별도 JSON AJAX 호출(`bbsListJson.json`)의 결과입니다. 현재 코드는 메인 HTML 대신 그 JSON API를 호출합니다. → [step6-data-source-redesign.md](./step6-data-source-redesign.md)
+
 ### 선택자 전략
 
 ```ts
@@ -598,6 +616,9 @@ return 'initial';
 ---
 
 ## 10. boardId 연속성 체크 알고리즘
+
+> ⚠️ **알고리즘의 의도는 살아있지만 구현 위치와 형태가 바뀌었습니다.**
+> "메인에서 밀려난 boardId도 누락 없이 잡는다"는 의도는 그대로지만, 현재는 JSON 응답이 페이지 1만 주는 한계를 메우기 위해 service 레이어의 `gap` 계산으로 옮겨졌고, 빈 번호 판정도 `view.do` 404가 아니라 HTTP 200 + 에러 페이지 마커(`isViewErrorPage`)로 합니다. → [step6-data-source-redesign.md](./step6-data-source-redesign.md)
 
 ### 문제
 

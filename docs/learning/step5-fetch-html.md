@@ -1,7 +1,14 @@
 # Step 5-1: fetchHtml — HTTP GET 래퍼
 
-> 파일: `src/lib/crawler/fetchHtml.tmp.ts`
+> 파일: `src/lib/crawler/fetchHtml.ts`
 > 역할: 서비스 레이어의 가장 낮은 층. 한 번의 HTTP 요청을 안전하게 보낸다.
+
+> 📌 **epic #19 이후 보강 — 본문은 여전히 유효합니다.**
+>
+> - `headers?: Record<string, string>` 옵션이 추가됐습니다. view.do 보강 호출 시 `Referer`를 주입하기 위함. 기본 헤더(User-Agent, Accept)와 머지되며 호출자 헤더가 우선합니다.
+> - JSON API 호출을 위한 형제 모듈 `fetchJsonText`가 생겼습니다 (POST + `application/x-www-form-urlencoded`). HTML이 아닌 응답은 이 모듈로 분리. 두 모듈은 `HttpError`/`InvalidContentTypeError`/`TimeoutError`를 공유합니다.
+>
+> 자세한 설계 맥락은 [step6-data-source-redesign.md](./step6-data-source-redesign.md) 참고.
 
 ## 왜 이 레이어가 따로 필요한가
 

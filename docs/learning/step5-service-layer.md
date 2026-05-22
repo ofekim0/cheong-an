@@ -2,6 +2,16 @@
 
 > 선행: [step5-fetch-html.md](./step5-fetch-html.md), [step5-retry.md](./step5-retry.md), [step5-rate-limit.md](./step5-rate-limit.md)
 
+> ⚠️ **이 문서의 §2 흐름 도식, §3-3 (404 = 빈 번호), §5 한계 일부는 epic [#19](https://github.com/ofekim0/cheong-an/issues/19) (2026-05-22 머지) 이후 폐기됨.**
+>
+> - **흐름 도식 (§2)**: "메인 fetch → parseMainPage → findNewBoardIds → 후보별 view.do" 구조가 폐기되고, "JSON API fetch → parseListJson → filter + gap → gap에 대해서만 view.do 보강"으로 바뀜.
+> - **404 정책 (§3-3)**: 빈 번호 판정이 `HttpError(404)` 캐치에서 HTTP 200 + 본문 마커(`isViewErrorPage`)로 변경. 청년안심주택 사이트는 빈 번호에 633B 에러 페이지를 200으로 반환.
+> - **한계 (§5)**: "상세 페이지 검증 미구현"은 epic #19로 해결됨. 나머지 한계(단일 인스턴스 rateLimit, DB 미연동, 스케줄링 미포함)는 여전히 유효.
+>
+> §1 (왜 별도 레이어), §3-1 (rateLimit OUTSIDE retry), §3-2 (직렬 루프), §3-4 (latestBoardId 의미), §4 (DI 주입 포인트), §6 (테스트 포인트의 핵심 의도)은 현재도 유효합니다.
+>
+> 재설계 학습은 [step6-data-source-redesign.md](./step6-data-source-redesign.md) 참고. 이 문서는 그 시점의 합성 설계 사고를 박제로 보존합니다.
+
 `fetchHtml` (전송) · `retry` (신뢰성) · `rateLimit` (속도) · `parseMainPage` / `parseDetailPage` (파싱) — 다섯 모듈을 **한 회차 크롤링**으로 묶는 합성 레이어.
 
 ## 1. 왜 별도 레이어가 필요한가
