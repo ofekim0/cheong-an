@@ -22,6 +22,8 @@ export interface FetchHtmlOptions {
   userAgent?: string;
   /**타임아웃 (ms, 기본 10초) */
   timeoutMs?: number;
+  /** 추가 헤더 (Referer 등). User-Agent/Accept과 머지된다. */
+  headers?: Record<string, string>;
   /** 외부 주입용 fetch - 테스트에서 MSW 대신 직접 mock 가능 */
   fetchImpl?: typeof fetch;
 }
@@ -64,6 +66,7 @@ export async function fetchHtml(
   const {
     userAgent = DEFAULT_USER_AGENT,
     timeoutMs = DEFAULT_TIMEOUT_MS,
+    headers,
     fetchImpl = fetch,
   } = options;
 
@@ -76,6 +79,7 @@ export async function fetchHtml(
       headers: {
         'User-Agent': userAgent,
         Accept: 'text/html,application/xhtml+xml',
+        ...headers,
       },
       signal: controller.signal,
     });
