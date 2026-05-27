@@ -1,6 +1,6 @@
 # Step 5-2: retry — 재시도 정책
 
-> 파일: `src/lib/crawler/retry.tmp.ts`
+> 파일: `src/lib/crawler/retry.ts`
 > 역할: 실패할 수 있는 작업을 "상황에 맞게" 다시 시도한다.
 
 ## 왜 재시도가 필요한가
@@ -123,4 +123,4 @@ throw lastError; // ← 이론상 도달 불가
 
 ## 다음 단계
 
-`withRetry`는 "한 작업이 몇 번 실패하는가"만 본다. "전체적으로 요청을 1초에 한 번 이하로 보낸다" 같은 전역 제약은 `rateLimit.tmp.ts`가 담당한다.
+`withRetry`는 "한 작업이 몇 번 실패하는가"만 본다. "전체적으로 요청을 1초에 한 번 이하로 보낸다" 같은 전역 제약은 `rateLimit.ts`가 담당한다.
