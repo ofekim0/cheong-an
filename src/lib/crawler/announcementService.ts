@@ -1,11 +1,13 @@
 /**
- * 크롤링 파이프라인 합성 레이어
+ * 크롤링 파이프라인 합성 레이어 (ADR 003 옵션 B 반영).
  *
  * 책임 범위:
- * - JSON 목록 API(bbsListJson.json) 1회 호출로 boardId·본문·메타데이터 일괄 수신.
- * - JSON에 빠진 gap(=lastBoardId+1 ~ JSON 최신 boardId 사이의 미관측 ID)을
- *   view.do로 직접 보강 fetch. 633B 에러 페이지는 skippedBoardIds로 분리.
+ * - JSON 목록 API(bbsListJson.json) 1회 호출로 latestBoardId 산출.
+ * - 신규 boardId 전체(= lastBoardId+1 ~ latestBoardId)를 view.do로 직접 호출해
+ *   완전한 AnnouncementDetail을 얻는다. JSON 응답에 있든(신규) 없든(gap) 모두 view.do 통일.
+ * - 633B 에러 페이지는 skippedBoardIds로 분리.
  * - 각 호출에 rateLimit과 retry를 일관되게 적용.
+ * - 호출 순서는 boardId 오름차순 (디버깅·재시도 추적 단순화).
  *
  * 책임이 아닌 것:
  * - HTTP 자체 (fetchJsonText / fetchHtml).
@@ -15,7 +17,9 @@
  * - 비존재 boardId 판별 (isViewErrorPage).
  * - DB 저장이나 lastBoardId persistence (호출자의 일).
  *
- * 데이터 소스 결정 근거: docs/adr/002-crawling-data-source.md (옵션 C 하이브리드)
+ * 결정 근거:
+ * - ADR 002 옵션 C (하이브리드 데이터 소스 — JSON 주 + view.do 보강).
+ * - ADR 003 옵션 B (저장 전 view.do 보강 → 모든 신규는 detail로 통일).
  */
 
 import { fetchHtml, type FetchHtmlOptions } from './fetchHtml';
@@ -25,10 +29,7 @@ import { createRateLimiter, type RateLimiter } from './rateLimit';
 import { parseListJson } from './parseListJson';
 import { parseDetailPage } from './parseDetailPage';
 import { isViewErrorPage } from './isViewErrorPage';
-import type {
-  AnnouncementDetail,
-  AnnouncementListItem,
-} from '@/types/announcement';
+import type { AnnouncementDetail } from '@/types/announcement';
 
 const DEFAULT_LIST_URL =
   'https://soco.seoul.go.kr/youth/pgm/home/yohome/bbsListJson.json';
@@ -52,7 +53,7 @@ const DEFAULT_VIEW_URL_BUILDER = (boardId: number): string =>
 const DEFAULT_INTERVAL_MS = 1_000;
 
 export interface CrawlAnnouncementsOptions {
-  /** 마지막으로 확인한 boardId. 이보다 큰 것만 새 공고. */
+  /** 마지막으로 확인한 boardId. 이보다 큰 것만 새 공고 후보. */
   lastBoardId: number;
   /** 호출 간 최소 간격 (ms, 기본 1_000). */
   intervalMs?: number;
@@ -60,13 +61,13 @@ export interface CrawlAnnouncementsOptions {
   listUrl?: string;
   /** form body override. */
   listBody?: Record<string, string>;
-  /** JSON API fetcher - 테스트에서 MSW로 교체. */
+  /** JSON API fetcher — 테스트에서 MSW로 교체. */
   fetcher?: (url: string, options?: FetchJsonOptions) => Promise<string>;
   /** boardId -> view.do URL 빌더 (테스트 override). */
   buildViewUrl?: (boardId: number) => string;
-  /** view.do HTML fetcher - 테스트에서 MSW로 교체. */
+  /** view.do HTML fetcher — 테스트에서 MSW로 교체. */
   viewFetcher?: (url: string, options?: FetchHtmlOptions) => Promise<string>;
-  /** 재시도 옵션 - 미지정 시 retry 모듈 기본값. */
+  /** 재시도 옵션 — 미지정 시 retry 모듈 기본값. */
   retryOptions?: RetryOptions;
   /** 외부 주입할 RateLimiter (공유 limiter 패턴). */
   rateLimiter?: RateLimiter;
@@ -74,19 +75,20 @@ export interface CrawlAnnouncementsOptions {
 
 export interface CrawlAnnouncementsResult {
   /**
-   * 이번 회차에 새로 발견한 공고 목록.
-   * - JSON 응답의 lastBoardId 초과분 + view.do 보강분.
-   * - JSON 항목이 앞, view.do 항목이 뒤.
+   * 이번 회차에 새로 발견한 공고의 완전한 detail 목록.
+   * - 모든 신규 boardId를 view.do로 확인한 결과.
+   * - boardId 오름차순 정렬.
    */
-  newAnnouncements: AnnouncementListItem[];
+  newDetails: AnnouncementDetail[];
   /**
    * 응답에서 관측한 가장 큰 boardId.
    * resultList가 비어 있으면 입력 lastBoardId를 그대로 반환.
    */
   latestBoardId: number;
   /**
-   * gap 후보 중 view.do가 633B 에러 페이지로 응답한 boardId.
-   * 운영 관찰용 (빈 번호가 얼마나 끼는지 추적).
+   * 신규 후보 중 view.do가 633B 에러 페이지로 응답한 boardId.
+   * 운영 관찰용(빈 번호가 얼마나 끼는지 추적).
+   * boardId 오름차순 정렬.
    */
   skippedBoardIds: number[];
 }
@@ -128,82 +130,50 @@ export async function crawlNewAnnouncements(
         ),
       );
 
-  // 1) JSON API 1회 호출.
+  // 1) JSON API 1회 호출 → latestBoardId 산출.
+  //    JSON 응답은 신규 boardId 발견과 latest 추적 용도만 담당한다(옵션 B).
   const jsonText = await fetchJsonWithPolicy(listUrl);
   const items = parseListJson(jsonText);
 
   if (items.length === 0) {
     return {
-      newAnnouncements: [],
+      newDetails: [],
       latestBoardId: lastBoardId,
       skippedBoardIds: [],
     };
   }
 
-  const observedIds = new Set(items.map((i) => i.boardId));
   const latestBoardId = items.reduce(
     (max, item) => (item.boardId > max ? item.boardId : max),
     -Infinity,
   );
 
-  // 2) JSON 응답의 lastBoardId 초과분 = 즉시 신규 공고로 채택.
-  const newFromJson = items.filter((item) => item.boardId > lastBoardId);
-
-  // 3) gap = lastBoardId+1 ~ latestBoardId 범위에서 JSON에 안 들어온 것들.
-  const gap: number[] = [];
+  // 2) 신규 boardId 집합 = lastBoardId+1 ~ latestBoardId 전체.
+  //    JSON에 있든(신규) 없든(gap) 모두 view.do로 detail을 확보한다.
+  //    오름차순이 곧 자연스러운 호출 순서.
+  const newBoardIds: number[] = [];
   for (let id = lastBoardId + 1; id <= latestBoardId; id++) {
-    if (!observedIds.has(id)) gap.push(id);
+    newBoardIds.push(id);
   }
 
-  // 4) gap의 각 boardId를 view.do로 직접 확인.
+  // 3) 각 boardId를 view.do로 호출.
   //    - 633B 에러 페이지 → 비존재 → skippedBoardIds.
-  //    - 정상 → parseDetailPage → AnnouncementListItem으로 변환 후 newFromView.
-  const newFromView: AnnouncementListItem[] = [];
+  //    - 정상 → parseDetailPage → newDetails.
+  const newDetails: AnnouncementDetail[] = [];
   const skippedBoardIds: number[] = [];
 
-  for (const boardId of gap) {
+  for (const boardId of newBoardIds) {
     const html = await fetchViewWithPolicy(buildViewUrl(boardId));
     if (isViewErrorPage(html)) {
       skippedBoardIds.push(boardId);
       continue;
     }
-    const detail = parseDetailPage(html, boardId);
-    newFromView.push(detailToListItem(detail));
+    newDetails.push(parseDetailPage(html, boardId));
   }
 
   return {
-    newAnnouncements: [...newFromJson, ...newFromView],
+    newDetails,
     latestBoardId,
     skippedBoardIds,
   };
-}
-
-/**
- * AnnouncementDetail(parseDetailPage 결과)을 AnnouncementListItem 형태로 변환.
- *
- * 매핑 손실:
- * - agency: JSON에는 있고 HTML에는 명시적 필드가 없어 null로 둔다.
- * - attachmentId: attachmentUrl(`fileDown.do?atchFileId=...`)에서 추출.
- *
- * JSON 항목과 view.do 보강 항목을 같은 결과 배열에 담기 위한 어댑터.
- */
-function detailToListItem(detail: AnnouncementDetail): AnnouncementListItem {
-  return {
-    boardId: detail.boardId,
-    title: detail.title,
-    announcementType: detail.announcementType,
-    recruitmentType: detail.recruitmentType,
-    agency: null,
-    postDate: detail.postDate,
-    applicationStartDate: detail.applicationStartDate,
-    applicationEndDate: detail.applicationEndDate,
-    attachmentId: extractAttachmentId(detail.attachmentUrl),
-    rawContent: detail.rawContent,
-  };
-}
-
-function extractAttachmentId(url: string | null): string | null {
-  if (!url) return null;
-  const match = url.match(/[?&]atchFileId=([^&]+)/);
-  return match ? match[1] : null;
 }
