@@ -20,7 +20,7 @@ GitHub: `ofekim0/cheong-an` (Public, MIT)
     - `announcements` 테이블 마이그레이션 (`supabase/migrations/00001_create_announcements.sql`), 타입 정의 (`src/types/announcement.ts`)
     - 서비스 레이어 (`fetchHtml`, `fetchJsonText`, `retry`, `rateLimit`, `isViewErrorPage`, `announcementService` + MSW 통합 테스트)
     - 데이터 소스 재설계 (epic #19, PR #20~23 머지): JSON API(주) + view.do(gap 보강) 하이브리드. 결정 근거는 `docs/adr/002-crawling-data-source.md`
-    - 학습 정리 문서는 `docs/learning/` 하위 (`step4-crawling.md`, `step5-fetch-html.md`, `step5-retry.md`, `step5-rate-limit.md`, `step5-service-layer.md`, `step5-msw-testing.md`, `step6-data-source-redesign.md`)
+    - 학습 정리 문서는 `docs/learning/` 하위에 보편 패턴만 보존 (`step4-cheerio.md`, `step4-vitest-basics.md`, `step4-db-basics.md`, `step5-fetch-html.md`, `step5-retry.md`, `step5-rate-limit.md`, `step5-msw-testing.md`). 청안 고유 판단은 ADR(`docs/adr/`)과 코드 주석에 둔다.
   - 잔여: ① Supabase 연동(저장 + `lastBoardId` 추적, 이슈 #12) ② 스케줄러(Vercel Cron / GitHub Actions, 1시간 간격, 이슈 #13)
   - 상세 진척과 인계 컨텍스트는 `HANDOFF.md` § 0 참고
 - **Phase 1 Sprint 2 (알림 시스템 + 기본 UI)**: 미착수
@@ -167,7 +167,8 @@ PR 생성을 요청받으면 `.github/pull_request_template.md` 양식에 맞춰
 - **작업 중**: 새 라이브러리·외부 API를 처음 연동했을 때, 또는 새로운 아키텍처 패턴/설계 방식을 적용했을 때, 또는 인프라·배포·CI 설정을 변경했을 때
 - **PR 생성 시**: 해당 브랜치에서 새 기술 개념이 도입됐지만 아직 학습 문서가 없는 경우
 - **백필**: 최근 머지된 PR(또는 git log)에서 새 기술 개념이 식별되는데 해당 학습 정리가 누락된 것을 감지했을 때
-- 파일명 형식: `docs/learning/stepN-*.md` (예: `docs/learning/step4-crawling.md`)
+- 파일명 형식: `docs/learning/stepN-*.md` (예: `docs/learning/step5-retry.md`)
+- **범위**: 학습 문서는 "다른 프로젝트에도 가져갈 보편 패턴"만 담는다. 청안 고유 판단(특정 사이트 응답 패턴, 매핑 정책, 단일행 트리비얼 필터 같은 코드-국지적 의사결정)은 ADR 또는 코드 주석으로 이관한다
 - 참고: 기존 학습 정리 문서는 `docs/learning/` 디렉토리에 정리되어 있음
 
 ### 스프린트 회고 권유
