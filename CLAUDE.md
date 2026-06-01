@@ -11,19 +11,9 @@ GitHub: `ofekim0/cheong-an` (Public, MIT)
 - 기존에 청년안심주택 전용 알림 서비스가 없어서 직접 만드는 프로젝트
 - 상세: `docs/PROJECT_PLAN.md`
 
-### 현재 진행 상황 (2026-05-22 기준)
+### 현재 진행 상황
 
-- **Phase 0 (프로젝트 셋업)**: 완료 — Next.js, ESLint, Vitest, CI/CD 구축
-- **Phase 1 Sprint 1 (크롤링 파이프라인)**: 진행 중
-  - 완료:
-    - 파서 레이어 (`parseDetailPage`, `parseListJson` + 단위 테스트). 메인 페이지 HTML 파서 (`parseMainPage`, `checkBoardId`)는 epic #19에서 폐기됨
-    - `announcements` 테이블 마이그레이션 (`supabase/migrations/00001_create_announcements.sql`), 타입 정의 (`src/types/announcement.ts`)
-    - 서비스 레이어 (`fetchHtml`, `fetchJsonText`, `retry`, `rateLimit`, `isViewErrorPage`, `announcementService` + MSW 통합 테스트)
-    - 데이터 소스 재설계 (epic #19, PR #20~23 머지): JSON API(주) + view.do(gap 보강) 하이브리드. 결정 근거는 `docs/adr/002-crawling-data-source.md`
-    - 학습 정리 문서는 `docs/learning/` 하위에 보편 패턴만 보존 (`step4-cheerio.md`, `step4-vitest-basics.md`, `step4-db-basics.md`, `step5-fetch-html.md`, `step5-retry.md`, `step5-rate-limit.md`, `step5-msw-testing.md`). 청안 고유 판단은 ADR(`docs/adr/`)과 코드 주석에 둔다.
-  - 잔여: ① Supabase 연동(저장 + `lastBoardId` 추적, 이슈 #12) ② 스케줄러(Vercel Cron / GitHub Actions, 1시간 간격, 이슈 #13)
-  - 상세 진척과 인계 컨텍스트는 `HANDOFF.md` § 0 참고
-- **Phase 1 Sprint 2 (알림 시스템 + 기본 UI)**: 미착수
+휘발성 진척 추적은 `HANDOFF.md` § 0 (단일 출처). 전체 Phase·Sprint 계획은 `docs/PROJECT_PLAN.md`.
 
 ## 기술 스택
 
