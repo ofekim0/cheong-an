@@ -1,7 +1,5 @@
 # Step 2: 프로젝트 초기화 — 핵심 정리
 
-> 상세 작업 기록은 [step2-project-init.md](./step2-project-init.md) 참고
-
 ---
 
 ## 목차
