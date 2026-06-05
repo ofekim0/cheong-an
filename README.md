@@ -53,6 +53,42 @@ pnpm test
 pnpm build
 ```
 
+## 운영
+
+### 크롤링 스케줄러 (#13)
+
+1시간 간격으로 `/api/cron/crawl`을 호출해 새 공고를 수집한다.
+스케줄러는 GitHub Actions(`.github/workflows/crawl.yml`)에서 동작하며,
+배포된 Vercel 엔드포인트를 `Authorization: Bearer $CRON_SECRET`으로 트리거한다.
+근거는 [ADR 004](./docs/adr/004-scheduler-choice.md).
+
+#### 시크릿 등록 (최초 1회)
+
+| 위치            | 키                          | 값                                                   |
+| --------------- | --------------------------- | ---------------------------------------------------- |
+| Vercel 환경변수 | `SUPABASE_URL`              | Supabase Project Settings → API                      |
+| Vercel 환경변수 | `SUPABASE_SERVICE_ROLE_KEY` | 동일 (server-side, 클라이언트 노출 금지)             |
+| Vercel 환경변수 | `CRON_SECRET`               | 임의 난수 (예: `openssl rand -hex 32`)               |
+| GitHub Secrets  | `CRON_SECRET`               | **Vercel과 동일 값**                                 |
+| GitHub Secrets  | `DEPLOY_URL`                | Vercel 배포 URL (예: `https://cheong-an.vercel.app`) |
+
+토큰 불일치 호출은 401로 거부된다. `CRON_SECRET`을 회전하면 두 곳을 함께 갱신한다.
+
+#### 수동 트리거
+
+GitHub Actions의 `Crawl` 워크플로우에서 **Run workflow** 버튼으로 즉시 실행 가능.
+
+#### 로컬 트리거
+
+`.env.local`에 `CRON_SECRET=dev-secret`을 두고 dev 서버 기동 후:
+
+```bash
+curl --fail -H "Authorization: Bearer dev-secret" \
+  http://localhost:3000/api/cron/crawl
+```
+
+응답: `{ newCount, skippedBoardIds, latestBoardId }`.
+
 ## 라이선스
 
 [MIT](./LICENSE)
