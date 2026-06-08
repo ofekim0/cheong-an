@@ -5,7 +5,7 @@
 
 ---
 
-## 0. 최신 상태 (2026-06-01 기준)
+## 0. 최신 상태 (2026-06-05 기준)
 
 ### 완료된 Step
 
@@ -21,19 +21,22 @@
 | Step 6      | 데이터 소스 재설계: JSON API(주) + view.do(gap 보강) 하이브리드 (epic #19, PR #20~23, #25 머지)                                                                                                                                                  | `src/lib/crawler/parseListJson.ts`, `fetchJsonText.ts`, `isViewErrorPage.ts`, `announcementService.ts` 재작성, `__fixtures__/{listJson.json,viewErrorPage.html,detailPage.html}` 실 응답 박제. 결정 근거는 ADR 002/003. 기존 `parseMainPage.ts`/`checkBoardId.ts` 폐기 표기 (실제 제거는 PR #27)                                                                                                      |
 | Step 6 정리 | epic #19 후속 정리 (PR #27 머지): #12·#13 이슈 본문을 옵션 B / GHA 기준으로 다듬고, 폐기 표기된 `checkBoardId` 모듈 실제 삭제                                                                                                                    | `src/lib/crawler/checkBoardId.ts`(+`.test.ts`) 삭제, `src/lib/crawler/index.ts` export 정리. 단위·통합 테스트 49개 그린 (checkBoardId.test.ts 9개 제거 영향)                                                                                                                                                                                                                                          |
 | Step 7      | Supabase 저장 통합 (#12 완료): admin 클라이언트 + `announcements` UPSERT 리포지터리 + `crawl_state` 리포지터리 + `announcementService` 저장 연결. `crawl_state` 갱신 호출은 #13 스케줄러 통합 시점에 연결 예정                                   | `src/lib/supabase/{client.ts, announcementsRepository.ts(+.test.ts), crawlStateRepository.ts(+.test.ts)}`, `src/lib/crawler/announcementService.ts` 갱신, `.env.example`, `docs/learning/{step7-supabase-client.md, step7-repository-pattern.md, step7-mocking-supabase.md}`. PR #29 (1차 통합) + PR #30 (cleanup — 테스트 백필 + crawl_state + env 문서화 + 학습 정리). 테스트 61개 그린             |
+| Step 8      | 크롤링 스케줄러 (#13): `/api/cron/crawl` Route Handler + `.github/workflows/crawl.yml` (1시간 cron + `workflow_dispatch` + `curl --fail`). `CRON_SECRET` Bearer 인증, `crawlStateRepository.updateLastBoardId` 연결까지 완료                     | `src/app/api/cron/crawl/{route.ts, route.test.ts}` (인증 4종 + 정상 흐름 + 실패 케이스, 66개 그린), `.github/workflows/crawl.yml`, `.env.example`(`CRON_SECRET` 추가), `README.md`(운영 섹션 — 시크릿 등록 + 수동/로컬 트리거), `docs/learning/step8-gha-cron-vercel-trigger.md`. 결정 근거는 ADR 004                                                                                                 |
 | 학습 정리   | Sprint 1 학습 문서 정책 정리 (PR #31 머지): `docs/learning/`을 "다른 프로젝트에도 가져갈 보편 패턴"만 보존하도록 통합. 청안 고유 판단(특정 사이트 응답 패턴, 매핑 정책, 단일행 트리비얼 필터 등)은 ADR/코드 주석으로 이관. CLAUDE.md에 정책 반영 | `docs/learning/{step2-project-init, step4-crawling, step5-service-layer, step6-data-source-redesign}.md` 통합·삭제, `step4-{cheerio, vitest-basics, db-basics}.md` 신설, `step5-{fetch-html, msw-testing}.md`·`step7-*.md` 3종에서 청안 고유 절 제거. `step7-supabase-client.md`는 실제 `client.ts`와 정합 정정(싱글톤 캐시, 변수별 throw, autoRefreshToken 등). CLAUDE.md `docs/learning/` 정책 갱신 |
 | ADR 001     | 기술 스택 선정 근거 문서화                                                                                                                                                                                                                       | `docs/adr/001-tech-stack.md`                                                                                                                                                                                                                                                                                                                                                                          |
 | ADR 002     | 크롤링 데이터 소스 전략 — 옵션 비교 + C(하이브리드) 채택                                                                                                                                                                                         | `docs/adr/002-crawling-data-source.md`                                                                                                                                                                                                                                                                                                                                                                |
 | ADR 003     | 저장 매핑 전략 — 옵션 B (저장 전 view.do 보강) 채택. ADR 002 옵션 C 하이브리드를 "JSON으로 신규 감지 + 모든 신규는 view.do로 detail 확보" 패턴으로 좁힘                                                                                          | `docs/adr/003-storage-mapping-strategy.md`                                                                                                                                                                                                                                                                                                                                                            |
 | ADR 004     | 크롤링 스케줄러 선택 — GitHub Actions 채택 (1시간 간격, Hobby 플랜 무료)                                                                                                                                                                         | `docs/adr/004-scheduler-choice.md`                                                                                                                                                                                                                                                                                                                                                                    |
 
-### 진행 중: Sprint 1 잔여
+### 진행 중: Sprint 1 마무리
 
-크롤링 파이프라인 본체(데이터 소스 재설계 포함)와 Supabase 저장 통합(#12)까지 완료. 매핑 전략(ADR 003)·스케줄러(ADR 004)는 결정 완료. 남은 건 스케줄러 트리거(#13) 구현.
+크롤링 파이프라인 본체(데이터 소스 재설계 포함) + Supabase 저장 통합(#12) + 스케줄러(#13)까지 모두 구현 완료. Sprint 1의 기능 범위는 종료. 남은 건 운영 시크릿 등록과 회고.
 
-### 다음 할 일 (Sprint 1 잔여)
+### 다음 할 일
 
-1. **#13 스케줄러** — `/api/cron/crawl` Route Handler + `.github/workflows/crawl.yml` (1시간 간격, `CRON_SECRET` Bearer 인증). ADR 004 적용. Route Handler에서 `announcementService` 호출 후 `crawlStateRepository.updateLastBoardId` 연결
+1. **운영 시크릿 등록** — Vercel(`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `CRON_SECRET`) + GitHub Secrets(`CRON_SECRET` 동일 값, `DEPLOY_URL`). README "운영" 섹션 참고
+2. **첫 cron 실행 검증** — GitHub Actions의 `Crawl` 워크플로우를 `workflow_dispatch`로 1회 수동 트리거 → 응답 페이로드(`newCount`, `latestBoardId`)와 DB 반영 확인
+3. **Sprint 1 회고** — `docs/retrospectives/TEMPLATE.md` 양식으로 회고 작성. Phase 1 Sprint 1 (#11/#12/#13) 종료 시점
 
 ### 용어 매핑
 
