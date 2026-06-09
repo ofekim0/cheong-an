@@ -104,6 +104,29 @@ describe('crawlNewAnnouncements', () => {
     expect(result.skippedBoardIds).toEqual([]);
   });
 
+  // ADR 005: 시드값 0은 "초기 가동" 신호 → view.do 루프 생략, latestBoardId만 반환.
+  it('lastBoardId=0(부트스트랩)이면 view.do 호출 없이 latestBoardId만 반환', async () => {
+    const observedBoardIds: number[] = [];
+    server.use(
+      http.post(LIST_URL, () =>
+        jsonResponse(buildListJsonText([6561, 6560, 6559])),
+      ),
+      http.get(VIEW_BASE, ({ request }) => {
+        observedBoardIds.push(
+          Number(new URL(request.url).searchParams.get('boardId')),
+        );
+        return htmlResponse(detailHtmlFixture);
+      }),
+    );
+
+    const result = await crawlNewAnnouncements({ ...FAST, lastBoardId: 0 });
+
+    expect(observedBoardIds).toEqual([]);
+    expect(result.newDetails).toEqual([]);
+    expect(result.latestBoardId).toBe(6561);
+    expect(result.skippedBoardIds).toEqual([]);
+  });
+
   it('모든 신규가 정상 view.do면 boardId 오름차순으로 detail 배열 반환', async () => {
     const observedBoardIds: number[] = [];
     server.use(

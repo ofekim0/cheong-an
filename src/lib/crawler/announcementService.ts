@@ -8,6 +8,8 @@
  * - 633B 에러 페이지는 skippedBoardIds로 분리.
  * - 각 호출에 rateLimit과 retry를 일관되게 적용.
  * - 호출 순서는 boardId 오름차순 (디버깅·재시도 추적 단순화).
+ * - 부트스트랩(lastBoardId=0)에서는 catch-up 루프를 건너뛰고 latestBoardId만 반환
+ *   (ADR 005).
  *
  * 책임이 아닌 것:
  * - HTTP 자체 (fetchJsonText / fetchHtml).
@@ -20,6 +22,7 @@
  * 결정 근거:
  * - ADR 002 옵션 C (하이브리드 데이터 소스 — JSON 주 + view.do 보강).
  * - ADR 003 옵션 B (저장 전 view.do 보강 → 모든 신규는 detail로 통일).
+ * - ADR 005 (lastBoardId=0이면 부트스트랩으로 catch-up 생략).
  */
 
 import { fetchHtml, type FetchHtmlOptions } from './fetchHtml';
@@ -78,6 +81,7 @@ export interface CrawlAnnouncementsResult {
    * 이번 회차에 새로 발견한 공고의 완전한 detail 목록.
    * - 모든 신규 boardId를 view.do로 확인한 결과.
    * - boardId 오름차순 정렬.
+   * - 부트스트랩(lastBoardId=0) 호출에서는 항상 빈 배열.
    */
   newDetails: AnnouncementDetail[];
   /**
@@ -148,7 +152,18 @@ export async function crawlNewAnnouncements(
     -Infinity,
   );
 
-  // 2) 신규 boardId 집합 = lastBoardId+1 ~ latestBoardId 전체.
+  // 2) 부트스트랩: lastBoardId=0(마이그레이션 시드)은 "초기 가동" 신호.
+  //    과거 게시물은 알림 대상이 아니므로 catch-up 루프를 생략하고
+  //    latestBoardId만 반환 → 호출자가 last_board_id에 기록한다(ADR 005).
+  if (lastBoardId === 0) {
+    return {
+      newDetails: [],
+      latestBoardId,
+      skippedBoardIds: [],
+    };
+  }
+
+  // 3) 신규 boardId 집합 = lastBoardId+1 ~ latestBoardId 전체.
   //    JSON에 있든(신규) 없든(gap) 모두 view.do로 detail을 확보한다.
   //    오름차순이 곧 자연스러운 호출 순서.
   const newBoardIds: number[] = [];
@@ -156,7 +171,7 @@ export async function crawlNewAnnouncements(
     newBoardIds.push(id);
   }
 
-  // 3) 각 boardId를 view.do로 호출.
+  // 4) 각 boardId를 view.do로 호출.
   //    - 633B 에러 페이지 → 비존재 → skippedBoardIds.
   //    - 정상 → parseDetailPage → newDetails.
   const newDetails: AnnouncementDetail[] = [];
