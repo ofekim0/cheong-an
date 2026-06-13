@@ -129,17 +129,15 @@ export async function runCanary(
     return violations;
   }
 
-  const html = await rateLimiter
-    .acquire()
-    .then(() =>
-      withRetry(
-        () =>
-          viewFetcher(buildViewUrl(canaryBoardId), {
-            headers: { Referer: REFERER },
-          }),
-        retryOptions,
-      ),
-    );
+  const html = await rateLimiter.acquire().then(() =>
+    withRetry(
+      () =>
+        viewFetcher(buildViewUrl(canaryBoardId), {
+          headers: { Referer: REFERER },
+        }),
+      retryOptions,
+    ),
+  );
 
   if (isViewErrorPage(html)) {
     violations.push({
