@@ -5,6 +5,9 @@ import type { AnnouncementDetail } from '@/types/announcement';
 vi.mock('@/lib/crawler/announcementService', () => ({
   crawlNewAnnouncements: vi.fn(),
 }));
+vi.mock('@/lib/crawler/canary', () => ({
+  runCanary: vi.fn(),
+}));
 vi.mock('@/lib/supabase/client', () => ({
   getSupabaseAdminClient: vi.fn(),
 }));
@@ -17,6 +20,7 @@ vi.mock('@/lib/supabase/crawlStateRepository', () => ({
 }));
 
 import { crawlNewAnnouncements } from '@/lib/crawler/announcementService';
+import { runCanary } from '@/lib/crawler/canary';
 import { upsertAnnouncements } from '@/lib/supabase/announcementsRepository';
 import { getSupabaseAdminClient } from '@/lib/supabase/client';
 import {
@@ -61,6 +65,8 @@ describe('GET /api/cron/crawl', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     process.env.CRON_SECRET = 'test-secret';
+    // 기본: 카나리 통과(위반 0건). 위반 케이스는 개별 테스트에서 override.
+    vi.mocked(runCanary).mockResolvedValue([]);
   });
 
   afterEach(() => {
@@ -96,6 +102,22 @@ describe('GET /api/cron/crawl', () => {
 
     expect(response.status).toBe(401);
     expect(crawlNewAnnouncements).not.toHaveBeenCalled();
+  });
+
+  it('카나리 위반 시 500, crawl·DB 접근 전에 멈춤', async () => {
+    vi.mocked(runCanary).mockResolvedValue([
+      { code: 'LIST_EMPTY', message: 'list parser returned 0 items' },
+    ]);
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const response = await GET(makeRequest('Bearer test-secret'));
+
+    expect(response.status).toBe(500);
+    expect((await response.json()).error).toBe('Canary verification failed');
+    expect(getSupabaseAdminClient).not.toHaveBeenCalled();
+    expect(crawlNewAnnouncements).not.toHaveBeenCalled();
+
+    errSpy.mockRestore();
   });
 
   it('정상 흐름: 호출 순서 + 응답 페이로드', async () => {
