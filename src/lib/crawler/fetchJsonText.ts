@@ -1,5 +1,9 @@
 /**
- * JSON API 응답 본문을 가져오는 저수준 HTTP POST 래퍼.
+ * 청년안심주택 목록 JSON API(`bbsListJson.json`) 응답 본문을 가져오는 저수준 HTTP POST 래퍼.
+ *
+ * 하이브리드 데이터 소스 전략(ADR 002)에서 목록 주 데이터 소스를 담당한다.
+ * `bbsListJson.json`을 호출해 신규 boardId 발견 + 본문/분류 코드를 한 번에 수신한다.
+ * (누락 보강용 상세 페이지 GET 경로는 fetchHtml.ts)
  *
  * 책임 범위:
  * - x-www-form-urlencoded body로 POST 요청을 보낸다 (청년안심주택 JSON API 관습).

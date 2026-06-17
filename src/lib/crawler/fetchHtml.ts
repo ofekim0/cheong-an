@@ -1,5 +1,9 @@
 /**
- * 청년안심주택 홈페이지에서 HTML을 가져오는 저수준 HTTP GET 래퍼.
+ * 청년안심주택 상세 페이지(`view.do`) HTML을 가져오는 저수준 HTTP GET 래퍼.
+ *
+ * 하이브리드 데이터 소스 전략(ADR 002)에서 상세 페이지 보강 경로를 담당한다.
+ * JSON API 목록과 별개로, gap 구간의 boardId를 직접 GET해 누락을 메운다.
+ * (목록 주 소스는 fetchJsonText.ts의 POST JSON 경로)
  *
  * 책임 범위:
  * - URL로 GET 요청을 보낸다.
