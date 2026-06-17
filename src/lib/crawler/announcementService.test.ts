@@ -44,9 +44,9 @@ const FAST = {
   },
 };
 
-function buildListJsonText(boardIds: number[]): string {
+function buildListJsonText(boardIds: number[], totPage?: number): string {
   return JSON.stringify({
-    pagingInfo: { totRow: boardIds.length },
+    pagingInfo: { totRow: boardIds.length, ...(totPage ? { totPage } : {}) },
     resultList: boardIds.map((boardId) => ({
       boardId,
       nttSj: `[민간임대] 테스트 공고 ${boardId}`,
@@ -61,6 +61,15 @@ function buildListJsonText(boardIds: number[]): string {
     })),
   });
 }
+
+/**
+ * 공고게시일(view_data)이 없는 상세 페이지 — parseDetailPage가 postDate=''를 내고
+ * checkDetailInvariants의 DETAIL_INVALID_POST_DATE를 위반한다. 633B 에러 페이지는
+ * 아니므로 isViewErrorPage는 통과한다(불변식 게이트 경로 검증용).
+ */
+const invalidDetailHtml =
+  '<html><body><p class="subject">[민간임대] 불변식 위반 공고</p>' +
+  '<div class="board_cont">본문은 있으나 공고게시일 메타가 없음</div></body></html>';
 
 function jsonResponse(text: string, init: ResponseInit = {}) {
   return new HttpResponse(text, {
@@ -144,17 +153,17 @@ describe('crawlNewAnnouncements', () => {
 
     const result = await crawlNewAnnouncements({ ...FAST, lastBoardId: 100 });
 
-    // 옵션 B: JSON 신규 3건 모두 view.do로 호출 (오름차순).
+    // 목록에 있는 신규 3건 모두 view.do로 호출 (오름차순).
     expect(observedBoardIds).toEqual([101, 102, 103]);
     expect(result.newDetails.map((d) => d.boardId)).toEqual([101, 102, 103]);
     expect(result.latestBoardId).toBe(103);
     expect(result.skippedBoardIds).toEqual([]);
   });
 
-  it('JSON에 없는 gap도 신규 boardId 범위에 포함되어 view.do 호출', async () => {
-    // JSON: [103, 100], lastBoardId=99 → 신규 = [100, 101, 102, 103].
-    //   100, 103: JSON에 있어도 view.do로 다시 확인 (옵션 B).
-    //   101, 102: JSON에 없는 gap. view.do 호출.
+  // ADR 007: boardId 전역 시퀀스라 숫자 gap을 채우면 타 게시판 공고가 섞인다.
+  //   목록에 실제 존재하는 boardId만 크롤하고 gap(101, 102)은 건드리지 않는다.
+  it('목록에 없는 boardId(타 게시판/gap)는 크롤하지 않는다', async () => {
+    // JSON: [103, 100], lastBoardId=99 → 신규 후보 = [100, 103] (101, 102 제외).
     const observedBoardIds: number[] = [];
     server.use(
       http.post(LIST_URL, () => jsonResponse(buildListJsonText([103, 100]))),
@@ -169,39 +178,90 @@ describe('crawlNewAnnouncements', () => {
 
     const result = await crawlNewAnnouncements({ ...FAST, lastBoardId: 99 });
 
-    expect(observedBoardIds).toEqual([100, 101, 102, 103]);
-    expect(result.newDetails.map((d) => d.boardId)).toEqual([
-      100, 101, 102, 103,
-    ]);
+    expect(observedBoardIds).toEqual([100, 103]);
+    expect(result.newDetails.map((d) => d.boardId)).toEqual([100, 103]);
     expect(result.latestBoardId).toBe(103);
     expect(result.skippedBoardIds).toEqual([]);
+    expect(result.invalidBoardIds).toEqual([]);
   });
 
   it('신규 일부가 633B면 정상만 newDetails, 나머지는 skippedBoardIds (모두 오름차순)', async () => {
-    // 신규 = [100, 101, 102, 103]. 101은 633B.
+    // 신규 후보 = [100, 103]. 100은 633B.
     server.use(
       http.post(LIST_URL, () => jsonResponse(buildListJsonText([103, 100]))),
-      viewHandler([101]),
+      viewHandler([100]),
     );
 
     const result = await crawlNewAnnouncements({ ...FAST, lastBoardId: 99 });
 
-    expect(result.newDetails.map((d) => d.boardId)).toEqual([100, 102, 103]);
-    expect(result.skippedBoardIds).toEqual([101]);
+    expect(result.newDetails.map((d) => d.boardId)).toEqual([103]);
+    expect(result.skippedBoardIds).toEqual([100]);
     expect(result.latestBoardId).toBe(103);
   });
 
   it('신규 전체가 633B면 newDetails는 비고 skippedBoardIds에 전부', async () => {
     server.use(
       http.post(LIST_URL, () => jsonResponse(buildListJsonText([103, 100]))),
-      viewHandler([100, 101, 102, 103]),
+      viewHandler([100, 103]),
     );
 
     const result = await crawlNewAnnouncements({ ...FAST, lastBoardId: 99 });
 
     expect(result.newDetails).toEqual([]);
-    expect(result.skippedBoardIds).toEqual([100, 101, 102, 103]);
+    expect(result.skippedBoardIds).toEqual([100, 103]);
     expect(result.latestBoardId).toBe(103);
+  });
+
+  // ADR 006/007: 불변식 위반 detail은 저장에서 격리한다 — 단일 불량 row가 배치를
+  //   실패시켜 파이프라인을 동결시키는 것을 막는다. latestBoardId는 그대로 전진.
+  it('불변식 위반 detail은 invalidBoardIds로 격리하고 latestBoardId는 전진', async () => {
+    // 신규 후보 = [100, 101]. 101은 공고게시일이 없어 postDate 불변식 위반.
+    server.use(
+      http.post(LIST_URL, () => jsonResponse(buildListJsonText([101, 100]))),
+      http.get(VIEW_BASE, ({ request }) => {
+        const boardId = Number(
+          new URL(request.url).searchParams.get('boardId'),
+        );
+        return htmlResponse(
+          boardId === 101 ? invalidDetailHtml : detailHtmlFixture,
+        );
+      }),
+    );
+
+    const result = await crawlNewAnnouncements({ ...FAST, lastBoardId: 99 });
+
+    expect(result.newDetails.map((d) => d.boardId)).toEqual([100]);
+    expect(result.invalidBoardIds).toEqual([101]);
+    expect(result.skippedBoardIds).toEqual([]);
+    expect(result.latestBoardId).toBe(101);
+  });
+
+  // ADR 007: 신규가 1페이지(목록 상한)를 넘치면 다음 페이지를 조회해 보전한다.
+  it('신규가 1페이지를 넘으면 totPage 기준 다음 페이지를 조회한다', async () => {
+    // page1: [105,104,103] (totPage=2, 모두 >100 → 경계 못 넘음 → page2 조회)
+    // page2: [102,101,100] (100이 lastBoardId 이하 → 경계 → 중단)
+    // 신규 후보 = [101,102,103,104,105].
+    const listPageIndexes: string[] = [];
+    server.use(
+      http.post(LIST_URL, async ({ request }) => {
+        const params = new URLSearchParams(await request.text());
+        const pageIndex = params.get('pageIndex') ?? '1';
+        listPageIndexes.push(pageIndex);
+        if (pageIndex === '1') {
+          return jsonResponse(buildListJsonText([105, 104, 103], 2));
+        }
+        return jsonResponse(buildListJsonText([102, 101, 100], 2));
+      }),
+      viewHandler(),
+    );
+
+    const result = await crawlNewAnnouncements({ ...FAST, lastBoardId: 100 });
+
+    expect(listPageIndexes).toEqual(['1', '2']);
+    expect(result.newDetails.map((d) => d.boardId)).toEqual([
+      101, 102, 103, 104, 105,
+    ]);
+    expect(result.latestBoardId).toBe(105);
   });
 
   it('view.do detail은 complexName/district 등 풍부 필드를 보존', async () => {

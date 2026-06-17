@@ -22,7 +22,12 @@ import type {
 const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
 
 interface BbsListJsonResponse {
+  pagingInfo?: BbsPagingInfo | null;
   resultList?: BbsListJsonItem[] | null;
+}
+
+interface BbsPagingInfo {
+  totPage?: number | null;
 }
 
 interface BbsListJsonItem {
@@ -57,6 +62,34 @@ export function parseListJson(jsonText: string): AnnouncementListItem[] {
 
   const list = parsed.resultList ?? [];
   return list.map((item, index) => toListItem(item, index));
+}
+
+/**
+ * 같은 JSON 응답의 `pagingInfo.totPage`(총 페이지 수)를 추출한다.
+ *
+ * 목록 기반 크롤(ADR 007)에서 폴링 사이 1페이지를 넘겨 밀려난 신규를 보전하려면
+ * "다음 페이지가 있는가"를 알아야 한다. 양의 정수가 아니면(키 소실·구조 변경 포함)
+ * null을 반환해 호출자가 "추가 페이지 없음"으로 안전하게 처리하게 한다.
+ */
+export function parseTotalPages(jsonText: string): number | null {
+  let parsed: BbsListJsonResponse;
+  try {
+    parsed = JSON.parse(jsonText) as BbsListJsonResponse;
+  } catch (err) {
+    throw new ParseListJsonError(
+      `Invalid JSON: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+
+  const totPage = parsed.pagingInfo?.totPage;
+  if (
+    typeof totPage !== 'number' ||
+    !Number.isInteger(totPage) ||
+    totPage < 1
+  ) {
+    return null;
+  }
+  return totPage;
 }
 
 function toListItem(

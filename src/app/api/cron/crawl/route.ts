@@ -8,10 +8,10 @@
  *   1. Bearer 토큰 검증 (CRON_SECRET).
  *   2. 라이브 카나리 검증 (파서 불변식, ADR 006) — 위반 시 즉시 500, 저장 안 함.
  *   3. crawl_state.last_board_id 조회.
- *   4. JSON+view.do 하이브리드로 신규 detail 확보 (ADR 002/003).
- *   5. announcements UPSERT.
+ *   4. 목록 기반 크롤 + view.do 보강으로 신규 detail 확보 (ADR 002/003/007).
+ *   5. announcements UPSERT (불변식 위반 row는 이미 invalidBoardIds로 격리됨).
  *   6. crawl_state.last_board_id / last_crawled_at 갱신.
- *   7. JSON 응답: { newCount, skippedBoardIds, latestBoardId }.
+ *   7. JSON 응답: { newCount, skippedBoardIds, invalidBoardIds, latestBoardId }.
  *
  * 환경변수:
  *   - CRON_SECRET (필수): Bearer 인증.
@@ -70,8 +70,12 @@ export async function GET(request: Request): Promise<NextResponse> {
     const client = getSupabaseAdminClient();
     const lastBoardId = await getLastBoardId(client);
 
-    const { newDetails, latestBoardId, skippedBoardIds } =
+    const { newDetails, latestBoardId, skippedBoardIds, invalidBoardIds } =
       await crawlNewAnnouncements({ lastBoardId });
+
+    if (invalidBoardIds.length > 0) {
+      console.warn('[cron/crawl] 불변식 위반으로 저장 제외:', invalidBoardIds);
+    }
 
     await upsertAnnouncements(client, newDetails);
     await updateLastBoardId(client, latestBoardId);
@@ -79,6 +83,7 @@ export async function GET(request: Request): Promise<NextResponse> {
     return NextResponse.json({
       newCount: newDetails.length,
       skippedBoardIds,
+      invalidBoardIds,
       latestBoardId,
     });
   } catch (err) {
