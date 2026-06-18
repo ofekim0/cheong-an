@@ -128,6 +128,7 @@ describe('GET /api/cron/crawl', () => {
       newDetails: [buildDetail(101), buildDetail(103)],
       latestBoardId: 103,
       skippedBoardIds: [102],
+      invalidBoardIds: [],
     });
     vi.mocked(upsertAnnouncements).mockResolvedValue();
     vi.mocked(updateLastBoardId).mockResolvedValue();
@@ -138,6 +139,7 @@ describe('GET /api/cron/crawl', () => {
     expect(await response.json()).toEqual({
       newCount: 2,
       skippedBoardIds: [102],
+      invalidBoardIds: [],
       latestBoardId: 103,
     });
 
@@ -171,6 +173,7 @@ describe('GET /api/cron/crawl', () => {
       newDetails: [buildDetail(101)],
       latestBoardId: 101,
       skippedBoardIds: [],
+      invalidBoardIds: [],
     });
     vi.mocked(upsertAnnouncements).mockRejectedValue(new Error('db down'));
 
