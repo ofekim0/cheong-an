@@ -7,6 +7,31 @@
 
 ## 0. 최신 상태 (2026-06-09 기준)
 
+### 🚨 긴급 — 다음 세션에서 최우선 수행 (2026-06-17)
+
+**프로덕션 크롤 파이프라인이 영구 동결 중이다.** GitHub Actions `Crawl` 워크플로우가 2026-06-16 10:12(UTC)부터 매시간 HTTP 500으로 연속 실패한다(마지막 성공 06-16 04:46). 청량리역 퀸즈W(boardId 6564, 6/16 게시) 이후 모든 신규 공고가 저장되지 않는다.
+
+**근본 원인** (Issue #42 / ADR 007 `docs/adr/007-crawl-scope.md`에 상세):
+
+- boardId는 청년안심주택(BMSR00015)뿐 아니라 공지사항(BMSR00013) 등 **여러 게시판이 공유하는 전역 시퀀스**다. `view.do`는 경로의 bbsId를 무시하고 boardId만으로 콘텐츠를 반환한다.
+- 기존 `announcementService`의 gap-fill(= `lastBoardId+1 ~ latestBoardId` 전 정수를 view.do 호출)이 타 게시판 공고를 끌어왔다. 그중 6563(BMSR00013 "희망두배 청년통장")은 `공고게시일`이 없어 `parseDetailPage`가 `postDate=""`를 반환 → `post_date DATE NOT NULL` 위반 → 배치 upsert 전체 실패 → 500 → `updateLastBoardId` 미도달 → `crawl_state.last_board_id`가 6562에 고정 → 매시간 동일 실패.
+- **데이터 오염은 실데이터에 없음**(`announcements`에 정상 row 6562 1건뿐). 동결이 오염보다 먼저 막아준 상태라 DB 정리는 불필요.
+
+**수정안은 이미 작성되어 작업트리에 uncommitted로 존재한다** (커밋/PR은 절차 위반으로 되돌림). ADR 007 = 목록 기반 크롤로 전환:
+
+- gap-fill 폐기 → BMSR00015 JSON 목록에 실제 존재하고 `boardId > lastBoardId`인 항목만 크롤.
+- 1페이지 초과 신규는 `pagingInfo.totPage` 기준 페이지네이션으로 보전(`parseTotalPages` 추가).
+- 저장 전 `checkDetailInvariants` 게이트 + row별 격리(`invalidBoardIds`) → 단일 불량 row가 배치를 동결시키는 것을 구조적으로 차단.
+- 변경 파일(작업트리): `src/lib/crawler/parseListJson.ts`, `announcementService.ts`, `src/app/api/cron/crawl/route.ts`, `announcementService.test.ts`, `route.test.ts`. (되돌리기 직전 86 tests·tsc·eslint 그린이었으나 재검증 필요)
+
+**다음 세션 할 일** (각 외부 동작은 사용자 승인 후 진행):
+
+1. 작업트리 수정분 재검증(`npx vitest run`, `tsc --noEmit`, eslint) → `fix/*` 브랜치로 커밋 → PR → 머지 → 배포.
+2. 배포 후 `crawl_state.last_board_id=6562`를 그대로 두면 다음 크론이 후보 `[6564]`(퀸즈W)를 정상 수집하고 6563은 목록에 없어 자동 제외된다. 수동 개입 불필요.
+3. **잔여 불확실성**: 배포 엔드포인트의 실제 500 본문을 아직 확인하지 못함. 카나리(`CANARY_BOARD_ID` 공고 삭제)가 독립적으로 함께 실패 중일 가능성은 낮으나 배제 못 함. 머지 전 배포 엔드포인트 1회 호출로 500 본문(`Crawl failed: ...date...` vs `Canary verification failed`)을 확인하면 확정 가능.
+
+관련: Issue #42, ADR 007(PR #43 머지됨 — 설계만), PR #44(코드 수정 — CLOSED, 절차상 되돌림).
+
 ### 완료된 Step
 
 | Step          | 내용                                                                                                                                                                                                                                                                                                                                                               | 산출물                                                                                                                                                                                                                                                                                                                                                                                                |
