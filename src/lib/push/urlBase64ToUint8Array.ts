@@ -5,7 +5,9 @@
  * web-push가 생성하는 VAPID 공개키는 base64url 형식이지만
  * atob는 표준 base64만 받으므로 패딩 복구 + 문자 치환 후 디코드한다.
  */
-export function urlBase64ToUint8Array(base64UrlString: string): Uint8Array {
+export function urlBase64ToUint8Array(
+  base64UrlString: string,
+): Uint8Array<ArrayBuffer> {
   const padding = '='.repeat((4 - (base64UrlString.length % 4)) % 4);
   const base64 = (base64UrlString + padding)
     .replace(/-/g, '+')
