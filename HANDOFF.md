@@ -7,9 +7,11 @@
 
 ## 0. 최신 상태 (2026-06-25 기준)
 
-### 진행 중 — Sprint 2 웹 푸시 알림 (#39)
+### 진행 중 — Sprint 2 웹 푸시 알림 (#39) + 소셜 로그인 신규 편입
 
-Sprint 2 1번 작업(웹 푸시 파이프라인, #39)을 4개 Step(9-a~d)으로 쪼개 진행 중. **9-a 완료·머지**(PR #47): VAPID 유틸 + Service Worker 등록 + 구독 훅 + 임시 검증 UI까지 클라이언트 구독 경로 완성, 실제 Chrome에서 구독→endpoint 생성 end-to-end 검증. 다음은 9-b(구독 저장 API + `push_subscriptions` 스키마). 학습 문서(`docs/learning/step9-web-push.md`)는 발송까지 완결되는 9-c 시점에 일괄 작성 예정.
+Sprint 2 1번 작업(웹 푸시 파이프라인, #39)을 Step(9-a~d)으로 쪼개 진행 중. **9-a 완료·머지**(PR #47): VAPID 유틸 + Service Worker 등록 + 구독 훅 + 임시 검증 UI까지 클라이언트 구독 경로 완성, 실제 Chrome에서 구독→endpoint 생성 end-to-end 검증.
+
+**방향 전환(2026-06-25)**: 9-b 설계 중 서비스를 **로그인 사용자 기준**으로 운영하기로 결정 — 구독·발송·필터를 처음부터 `user_id`로 묶는다. 익명으로 먼저 만들면 나중에 user 연결 마이그레이션 + 고아 구독 정리로 두 번 일하므로, 순서를 바꿔 **소셜 로그인을 9-b 앞에 신규 편입**한다(근거: **ADR 009**). 이에 따라 ADR 008은 익명 → user 연결 모델로 **재작성**했고(`user_id` FK + RLS, endpoint UNIQUE·`410 Gone`은 유지), PROJECT_PLAN Sprint 2에 로그인을 편입했다. 학습 문서(`docs/learning/step9-web-push.md`)는 발송까지 완결되는 9-c 시점에 일괄 작성 예정.
 
 ### ✅ 해소됨 — 크롤 파이프라인 동결 (Issue #42, 2026-06-18)
 
@@ -32,7 +34,7 @@ Sprint 2 1번 작업(웹 푸시 파이프라인, #39)을 4개 Step(9-a~d)으로 
 | Step 9-a       | 웹 푸시 구독 클라 경로 (#39): VAPID 유틸 + SW 등록 + `usePushSubscription` 훅 + 임시 `/subscribe` UI. Chrome E2E 검증 | PR #47 (서버 저장 9-b·발송 9-c)                                                                     |
 | 운영·회고      | Sprint 1 운영 검증 (GHA dispatch 2회 success, `last_board_id` 6561 갱신) + Sprint 1 회고                              | `retrospectives/sprint-1`                                                                           |
 
-> ADR 전체: `docs/adr/` — 001 기술스택, 002/003 데이터소스·매핑, 004 스케줄러, 005 부트스트랩, 007 크롤 범위.
+> ADR 전체: `docs/adr/` — 001 기술스택, 002/003 데이터소스·매핑, 004 스케줄러, 005 부트스트랩, 006 크롤 출력 검증, 007 크롤 범위, 008 구독 저장 모델(user 연결), 009 소셜 로그인.
 
 ### Sprint 1 완료 — 다음 Sprint 2 시작 준비
 
@@ -40,11 +42,14 @@ Sprint 2 1번 작업(웹 푸시 파이프라인, #39)을 4개 Step(9-a~d)으로 
 
 ### 다음 할 일 — Sprint 2 (PROJECT_PLAN 4-1 참조)
 
-웹 푸시 파이프라인 (#39) 남은 Step:
+웹 푸시 파이프라인 (#39) 남은 Step (로그인 편입으로 재배열):
 
-- **9-b (다음)**: 구독 저장 API + DB 스키마 (`push_subscriptions`) — 9-a 훅이 반환한 구독을 저장
-- 9-c: 발송 트리거(크롤 신규 감지와 연결) + `web-push` 통합 + `410 Gone` 만료 정리
-- 9-d: Playwright E2E (구독 → 신규 공고 → 알림 수신)
+- **소셜 로그인 (다음, 신규)**: Supabase Auth + `@supabase/ssr` — browser/server 클라 + `middleware.ts`(세션 갱신) + `/auth/callback`(`exchangeCodeForSession`) + 구글·카카오 로그인/로그아웃 UI. 외부: 구글·카카오 콘솔 OAuth 앱 + Supabase 대시보드 provider 설정(수작업). 범위·근거 **ADR 009**. GitHub Issue 미생성 — 착수 전 생성 권장.
+- 9-b: 구독 저장 API + DB 스키마 (`push_subscriptions`) — `user_id` FK(NOT NULL) + endpoint UNIQUE + RLS. `POST /api/push/subscribe`는 세션에서 `user_id` 도출(비로그인 401). 모델·근거 **ADR 008**.
+- 9-c: 발송 트리거(크롤 신규 감지와 연결) + `web-push` 통합 + `WHERE user_id`로 사용자 구독 조회 + `410 Gone` 만료 정리
+- 9-d: Playwright E2E (로그인 → 구독 → 신규 공고 → 알림 수신)
+
+**9-a 머지 코드 부채(로그인 편입에 따른 재작업)**: `usePushSubscription` 훅·`urlBase64ToUint8Array`·`sw.js`는 인증과 분리돼 무변경 재사용. `/subscribe` 페이지·`PushSubscribeButton`만 비로그인 시 로그인 유도로 게이팅 필요(표현 계층 한정).
 
 이후 Sprint 2 나머지:
 
