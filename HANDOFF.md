@@ -44,7 +44,7 @@ Sprint 2 1번 작업(웹 푸시 파이프라인, #39)을 Step(9-a~d)으로 쪼�
 
 웹 푸시 파이프라인 (#39) 남은 Step (로그인 편입으로 재배열):
 
-- **소셜 로그인 (다음, 신규)**: Supabase Auth + `@supabase/ssr` — browser/server 클라 + `middleware.ts`(세션 갱신) + `/auth/callback`(`exchangeCodeForSession`) + 구글·카카오 로그인/로그아웃 UI. 외부: 구글·카카오 콘솔 OAuth 앱 + Supabase 대시보드 provider 설정(수작업). 범위·근거 **ADR 009**. GitHub Issue 미생성 — 착수 전 생성 권장.
+- **소셜 로그인 (진행 중 · #50)**: Supabase Auth + `@supabase/ssr` — browser/server 클라 + `middleware.ts`(세션 갱신) + `/auth/callback`(`exchangeCodeForSession`) + 구글·카카오 로그인/로그아웃 UI. 외부: 구글·카카오 콘솔 OAuth 앱 + Supabase 대시보드 provider 설정(수작업). 범위·근거 **ADR 009**.
 - 9-b: 구독 저장 API + DB 스키마 (`push_subscriptions`) — `user_id` FK(NOT NULL) + endpoint UNIQUE + RLS. `POST /api/push/subscribe`는 세션에서 `user_id` 도출(비로그인 401). 모델·근거 **ADR 008**.
 - 9-c: 발송 트리거(크롤 신규 감지와 연결) + `web-push` 통합 + `WHERE user_id`로 사용자 구독 조회 + `410 Gone` 만료 정리
 - 9-d: Playwright E2E (로그인 → 구독 → 신규 공고 → 알림 수신)
