@@ -38,6 +38,7 @@ yarn-error.log*
 /test-results/
 /playwright-report/
 /blob-report/
+/.playwright-mcp/
 
 # vercel
 .vercel
