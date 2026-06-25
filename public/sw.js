@@ -18,12 +18,7 @@ self.addEventListener('push', (event) => {
     payload = { title: '청안 알림', body: event.data.text() };
   }
 
-  const {
-    title = '청안 — 새 공고',
-    body = '',
-    url = '/',
-    tag,
-  } = payload ?? {};
+  const { title = '청안 — 새 공고', body = '', url = '/', tag } = payload ?? {};
 
   event.waitUntil(
     self.registration.showNotification(title, {
@@ -37,7 +32,8 @@ self.addEventListener('push', (event) => {
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
 
-  const targetUrl = (event.notification.data && event.notification.data.url) || '/';
+  const targetUrl =
+    (event.notification.data && event.notification.data.url) || '/';
 
   event.waitUntil(
     self.clients
