@@ -5,13 +5,13 @@
 
 ---
 
-## 0. 최신 상태 (2026-06-25 기준)
+## 0. 최신 상태 (2026-07-03 기준)
 
 ### 진행 중 — Sprint 2 웹 푸시 알림 (#39) + 소셜 로그인 신규 편입
 
 Sprint 2 1번 작업(웹 푸시 파이프라인, #39)을 Step(9-a~d)으로 쪼개 진행 중. **9-a 완료·머지**(PR #47): VAPID 유틸 + Service Worker 등록 + 구독 훅 + 임시 검증 UI까지 클라이언트 구독 경로 완성, 실제 Chrome에서 구독→endpoint 생성 end-to-end 검증.
 
-**방향 전환(2026-06-25)**: 9-b 설계 중 서비스를 **로그인 사용자 기준**으로 운영하기로 결정 — 구독·발송·필터를 처음부터 `user_id`로 묶는다. 익명으로 먼저 만들면 나중에 user 연결 마이그레이션 + 고아 구독 정리로 두 번 일하므로, 순서를 바꿔 **소셜 로그인을 9-b 앞에 신규 편입**한다(근거: **ADR 009**). 이에 따라 ADR 008은 익명 → user 연결 모델로 **재작성**했고(`user_id` FK + RLS, endpoint UNIQUE·`410 Gone`은 유지), PROJECT_PLAN Sprint 2에 로그인을 편입했다(#50). 소셜 로그인은 50-a(SSR 기반)·50-b(로그인 UI + 게이팅)로 분할했고 **둘 다 코드 완결**(50-a PR #52 머지, 50-b 구현·PR 대기). #50은 코드 기준 완결이며 실제 OAuth 로그인 E2E만 외부 설정(대시보드·콘솔·env) 후 남는다. 학습 문서: `@supabase/ssr` SSR 패턴은 **작성 완료**(`docs/learning/step50-supabase-ssr-auth.md`), 웹 푸시(`step9-web-push.md`)는 발송까지 완결되는 9-c 시점에 작성 예정.
+**방향 전환(2026-06-25)**: 9-b 설계 중 서비스를 **로그인 사용자 기준**으로 운영하기로 결정 — 구독·발송·필터를 처음부터 `user_id`로 묶는다. 익명으로 먼저 만들면 나중에 user 연결 마이그레이션 + 고아 구독 정리로 두 번 일하므로, 순서를 바꿔 **소셜 로그인을 9-b 앞에 신규 편입**한다(근거: **ADR 009**). 이에 따라 ADR 008은 익명 → user 연결 모델로 **재작성**했고(`user_id` FK + RLS, endpoint UNIQUE·`410 Gone`은 유지), PROJECT_PLAN Sprint 2에 로그인을 편입했다(#50). 소셜 로그인은 50-a(SSR 기반)·50-b(로그인 UI + 게이팅)로 분할했고 **둘 다 머지 완료**(50-a PR #52, 50-b PR #53). #50은 코드 기준 완결이며 실제 OAuth 로그인 E2E만 외부 설정(대시보드·콘솔·env) 후 남는다. 학습 문서: `@supabase/ssr` SSR 패턴은 **작성 완료**(`docs/learning/step50-supabase-ssr-auth.md`), 웹 푸시(`step9-web-push.md`)는 발송까지 완결되는 9-c 시점에 작성 예정.
 
 ### ✅ 해소됨 — 크롤 파이프라인 동결 (Issue #42, 2026-06-18)
 
@@ -33,7 +33,7 @@ Sprint 2 1번 작업(웹 푸시 파이프라인, #39)을 Step(9-a~d)으로 쪼�
 | 크롤 동결 픽스 | 동결 해소 (#42): gap-fill 폐기 → 목록 기반 크롤, 페이지네이션 보전, row별 격리. 프로덕션 500→200 검증                                                                          | ADR 007; PR #43·#45                                                                                 |
 | Step 9-a       | 웹 푸시 구독 클라 경로 (#39): VAPID 유틸 + SW 등록 + `usePushSubscription` 훅 + 임시 `/subscribe` UI. Chrome E2E 검증                                                          | PR #47 (서버 저장 9-b·발송 9-c)                                                                     |
 | Step 50-a      | 소셜 로그인 SSR 기반 (#50): `@supabase/ssr` browser/server 클라 + 세션 미들웨어 + OAuth 콜백 라우트. typecheck/lint/96 tests (정적·단위)                                       | ADR 009; PR #52 (로그인 UI·게이팅 50-b)                                                             |
-| Step 50-b      | 소셜 로그인 UI + 구독 게이팅 (#50): 구글·카카오 로그인/로그아웃 + `/subscribe` 게이팅 + `signInWithProvider`·`getSessionUser`. 103 tests (정적·단위, E2E는 외부 OAuth 설정 후) | ADR 009; `learning/step50-supabase-ssr-auth`                                                        |
+| Step 50-b      | 소셜 로그인 UI + 구독 게이팅 (#50): 구글·카카오 로그인/로그아웃 + `/subscribe` 게이팅 + `signInWithProvider`·`getSessionUser`. 103 tests (정적·단위, E2E는 외부 OAuth 설정 후) | ADR 009; PR #53; `learning/step50-supabase-ssr-auth`                                                |
 | 운영·회고      | Sprint 1 운영 검증 (GHA dispatch 2회 success, `last_board_id` 6561 갱신) + Sprint 1 회고                                                                                       | `retrospectives/sprint-1`                                                                           |
 
 > ADR 전체: `docs/adr/` — 001 기술스택, 002/003 데이터소스·매핑, 004 스케줄러, 005 부트스트랩, 006 크롤 출력 검증, 007 크롤 범위, 008 구독 저장 모델(user 연결), 009 소셜 로그인.
@@ -44,7 +44,7 @@ Sprint 2 1번 작업(웹 푸시 파이프라인, #39)을 Step(9-a~d)으로 쪼�
 
 ### 다음 할 일 — Sprint 2 (PROJECT_PLAN 4-1 참조)
 
-소셜 로그인(#50)은 50-a·50-b로 **코드 완결** → 다음은 **9-b**.
+소셜 로그인(#50)은 50-a(PR #52)·50-b(PR #53) **모두 머지 완료** → 다음은 **9-b**.
 
 - **외부 선결(#50 로그인 실제 E2E 전제, 사용자 작업)**: Supabase 대시보드 Google·Kakao provider 활성화 + client_id/secret + redirect allow-list / 구글·카카오 콘솔 OAuth 앱 등록 / env `NEXT_PUBLIC_SUPABASE_URL`·`NEXT_PUBLIC_SUPABASE_ANON_KEY` 주입(로컬 + Vercel). 미설정이어도 코드·단위 테스트는 진행 가능.
 
