@@ -11,7 +11,7 @@
 
 Sprint 2 1번 작업(웹 푸시 파이프라인, #39)을 Step(9-a~d)으로 쪼개 진행 중. **9-a 완료·머지**(PR #47): VAPID 유틸 + Service Worker 등록 + 구독 훅 + 임시 검증 UI까지 클라이언트 구독 경로 완성, 실제 Chrome에서 구독→endpoint 생성 end-to-end 검증.
 
-**방향 전환(2026-06-25)**: 9-b 설계 중 서비스를 **로그인 사용자 기준**으로 운영하기로 결정 — 구독·발송·필터를 처음부터 `user_id`로 묶는다. 익명으로 먼저 만들면 나중에 user 연결 마이그레이션 + 고아 구독 정리로 두 번 일하므로, 순서를 바꿔 **소셜 로그인을 9-b 앞에 신규 편입**한다(근거: **ADR 009**). 이에 따라 ADR 008은 익명 → user 연결 모델로 **재작성**했고(`user_id` FK + RLS, endpoint UNIQUE·`410 Gone`은 유지), PROJECT_PLAN Sprint 2에 로그인을 편입했다. 학습 문서(`docs/learning/step9-web-push.md`)는 발송까지 완결되는 9-c 시점에 일괄 작성 예정.
+**방향 전환(2026-06-25)**: 9-b 설계 중 서비스를 **로그인 사용자 기준**으로 운영하기로 결정 — 구독·발송·필터를 처음부터 `user_id`로 묶는다. 익명으로 먼저 만들면 나중에 user 연결 마이그레이션 + 고아 구독 정리로 두 번 일하므로, 순서를 바꿔 **소셜 로그인을 9-b 앞에 신규 편입**한다(근거: **ADR 009**). 이에 따라 ADR 008은 익명 → user 연결 모델로 **재작성**했고(`user_id` FK + RLS, endpoint UNIQUE·`410 Gone`은 유지), PROJECT_PLAN Sprint 2에 로그인을 편입했다(#50). 소셜 로그인은 50-a(SSR 기반)·50-b(로그인 UI + 게이팅)로 분할했고 **50-a 완료**(PR #52). 학습 문서(`docs/learning/step9-web-push.md`)는 발송까지 완결되는 9-c 시점에, `@supabase/ssr` SSR 패턴 학습 문서는 50 마무리 시점에 작성 예정.
 
 ### ✅ 해소됨 — 크롤 파이프라인 동결 (Issue #42, 2026-06-18)
 
@@ -19,20 +19,21 @@ Sprint 2 1번 작업(웹 푸시 파이프라인, #39)을 Step(9-a~d)으로 쪼�
 
 ### 완료된 Step
 
-| Step           | 내용                                                                                                                  | 근거·산출물                                                                                         |
-| -------------- | --------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| Step 2         | Next.js 초기화, Prettier/husky/lint-staged, Vitest/Playwright                                                         | `learning/step2-essentials`                                                                         |
-| Step 3         | Vercel 연동 + GitHub Actions CI (lint·tsc·test)                                                                       | `learning/step3-ci-setup`                                                                           |
-| Step 4         | 크롤 파서 + DB 스키마 + 타입                                                                                          | `learning/step4-{cheerio,vitest-basics,db-basics}` (※ `parseMainPage`·`checkBoardId`는 Step 6 폐기) |
-| Step 5-a~d     | fetch+retry / rateLimit / `announcementService` 합성 / MSW 통합테스트                                                 | `learning/step5-{fetch-html,retry,rate-limit,msw-testing}`                                          |
-| Step 6         | 데이터 소스 재설계: JSON 목록(주) + view.do 하이브리드 (epic #19)                                                     | ADR 002/003; PR #20~23·#25                                                                          |
-| Step 6 정리    | `checkBoardId` 모듈 실제 삭제 + 이슈 본문 정리                                                                        | PR #27                                                                                              |
-| Step 7         | Supabase 저장 통합: admin 클라 + `announcements` UPSERT + `crawl_state` 리포                                          | `learning/step7-*`; PR #29·#30                                                                      |
-| Step 8         | 크롤 스케줄러: `/api/cron/crawl` + `crawl.yml` (1h cron + dispatch), `CRON_SECRET` 인증                               | ADR 004; `learning/step8-gha-cron-vercel-trigger`; PR #35                                           |
-| Step 8 픽스    | 부트스트랩 catch-up 루프 픽스 — 시드 0이면 latestBoardId만 저장 (#36)                                                 | ADR 005; `troubleshooting/2026-06-09-cron-bootstrap-catch-up`                                       |
-| 크롤 동결 픽스 | 동결 해소 (#42): gap-fill 폐기 → 목록 기반 크롤, 페이지네이션 보전, row별 격리. 프로덕션 500→200 검증                 | ADR 007; PR #43·#45                                                                                 |
-| Step 9-a       | 웹 푸시 구독 클라 경로 (#39): VAPID 유틸 + SW 등록 + `usePushSubscription` 훅 + 임시 `/subscribe` UI. Chrome E2E 검증 | PR #47 (서버 저장 9-b·발송 9-c)                                                                     |
-| 운영·회고      | Sprint 1 운영 검증 (GHA dispatch 2회 success, `last_board_id` 6561 갱신) + Sprint 1 회고                              | `retrospectives/sprint-1`                                                                           |
+| Step           | 내용                                                                                                                                     | 근거·산출물                                                                                         |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| Step 2         | Next.js 초기화, Prettier/husky/lint-staged, Vitest/Playwright                                                                            | `learning/step2-essentials`                                                                         |
+| Step 3         | Vercel 연동 + GitHub Actions CI (lint·tsc·test)                                                                                          | `learning/step3-ci-setup`                                                                           |
+| Step 4         | 크롤 파서 + DB 스키마 + 타입                                                                                                             | `learning/step4-{cheerio,vitest-basics,db-basics}` (※ `parseMainPage`·`checkBoardId`는 Step 6 폐기) |
+| Step 5-a~d     | fetch+retry / rateLimit / `announcementService` 합성 / MSW 통합테스트                                                                    | `learning/step5-{fetch-html,retry,rate-limit,msw-testing}`                                          |
+| Step 6         | 데이터 소스 재설계: JSON 목록(주) + view.do 하이브리드 (epic #19)                                                                        | ADR 002/003; PR #20~23·#25                                                                          |
+| Step 6 정리    | `checkBoardId` 모듈 실제 삭제 + 이슈 본문 정리                                                                                           | PR #27                                                                                              |
+| Step 7         | Supabase 저장 통합: admin 클라 + `announcements` UPSERT + `crawl_state` 리포                                                             | `learning/step7-*`; PR #29·#30                                                                      |
+| Step 8         | 크롤 스케줄러: `/api/cron/crawl` + `crawl.yml` (1h cron + dispatch), `CRON_SECRET` 인증                                                  | ADR 004; `learning/step8-gha-cron-vercel-trigger`; PR #35                                           |
+| Step 8 픽스    | 부트스트랩 catch-up 루프 픽스 — 시드 0이면 latestBoardId만 저장 (#36)                                                                    | ADR 005; `troubleshooting/2026-06-09-cron-bootstrap-catch-up`                                       |
+| 크롤 동결 픽스 | 동결 해소 (#42): gap-fill 폐기 → 목록 기반 크롤, 페이지네이션 보전, row별 격리. 프로덕션 500→200 검증                                    | ADR 007; PR #43·#45                                                                                 |
+| Step 9-a       | 웹 푸시 구독 클라 경로 (#39): VAPID 유틸 + SW 등록 + `usePushSubscription` 훅 + 임시 `/subscribe` UI. Chrome E2E 검증                    | PR #47 (서버 저장 9-b·발송 9-c)                                                                     |
+| Step 50-a      | 소셜 로그인 SSR 기반 (#50): `@supabase/ssr` browser/server 클라 + 세션 미들웨어 + OAuth 콜백 라우트. typecheck/lint/96 tests (정적·단위) | ADR 009; PR #52 (로그인 UI·게이팅 50-b)                                                             |
+| 운영·회고      | Sprint 1 운영 검증 (GHA dispatch 2회 success, `last_board_id` 6561 갱신) + Sprint 1 회고                                                 | `retrospectives/sprint-1`                                                                           |
 
 > ADR 전체: `docs/adr/` — 001 기술스택, 002/003 데이터소스·매핑, 004 스케줄러, 005 부트스트랩, 006 크롤 출력 검증, 007 크롤 범위, 008 구독 저장 모델(user 연결), 009 소셜 로그인.
 
@@ -44,7 +45,8 @@ Sprint 2 1번 작업(웹 푸시 파이프라인, #39)을 Step(9-a~d)으로 쪼�
 
 웹 푸시 파이프라인 (#39) 남은 Step (로그인 편입으로 재배열):
 
-- **소셜 로그인 (진행 중 · #50)**: Supabase Auth + `@supabase/ssr` — browser/server 클라 + `middleware.ts`(세션 갱신) + `/auth/callback`(`exchangeCodeForSession`) + 구글·카카오 로그인/로그아웃 UI. 외부: 구글·카카오 콘솔 OAuth 앱 + Supabase 대시보드 provider 설정(수작업). 범위·근거 **ADR 009**.
+- **소셜 로그인 50-b (다음 · #50)**: 구글·카카오 로그인/로그아웃 UI(`signInWithOAuth({ provider })`) + `/subscribe`·`PushSubscribeButton` 비로그인 게이팅. 50-a(SSR 기반: 클라·미들웨어·콜백)는 **PR #52**로 완료 — 그 위에 얹는다. 범위·근거 **ADR 009**.
+  - **외부 선결(50-b E2E 전제, 사용자 작업)**: Supabase 대시보드 Google·Kakao provider 활성화 + client_id/secret + redirect allow-list / 구글·카카오 콘솔 OAuth 앱 등록 / env `NEXT_PUBLIC_SUPABASE_URL`·`NEXT_PUBLIC_SUPABASE_ANON_KEY` 주입(로컬 + Vercel). 미설정이어도 코드·단위 테스트는 진행 가능.
 - 9-b: 구독 저장 API + DB 스키마 (`push_subscriptions`) — `user_id` FK(NOT NULL) + endpoint UNIQUE + RLS. `POST /api/push/subscribe`는 세션에서 `user_id` 도출(비로그인 401). 모델·근거 **ADR 008**.
 - 9-c: 발송 트리거(크롤 신규 감지와 연결) + `web-push` 통합 + `WHERE user_id`로 사용자 구독 조회 + `410 Gone` 만료 정리
 - 9-d: Playwright E2E (로그인 → 구독 → 신규 공고 → 알림 수신)
