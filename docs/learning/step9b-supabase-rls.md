@@ -41,7 +41,9 @@ CREATE POLICY t_update_own ON t
   WITH CHECK (user_id = (SELECT auth.uid()));           -- 수정 결과를 남의 소유로 바꾸는 것도 차단
 ```
 
-UPDATE에 둘 다 거는 이유: `USING`만 있으면 "내 row를 남의 소유로 넘기는" 쓰기가 통과한다.
+UPDATE에서 `WITH CHECK`를 생략하면 **`USING`이 WITH CHECK 역할까지 겸한다** — 공식 규칙: "If only a USING clause is specified, then that clause will be used for both USING and WITH CHECK cases." 즉 생략해도 보안 구멍이 생기는 건 아니다. 그래도 명시적으로 둘 다 쓰는 이유는 **명시성**이다 — 두 조건이 달라야 하는 정책과 형태가 일관되고, 읽는 사람이 겸용 규칙을 몰라도 의도가 바로 보인다.
+
+덧붙여, 같은 명령에 정책이 여러 개면 **OR로 결합**된다(permissive 기본). 나중에 "관리자는 전체 읽기" 같은 정책을 추가하면 기존 본인-row 정책과 합집합으로 넓어진다는 뜻이다 — AND로 좁히려면 별도의 `AS RESTRICTIVE` 정책을 쓴다.
 
 ---
 
@@ -87,6 +89,8 @@ USING (user_id = (SELECT auth.uid()))
 ```
 
 row 수가 작을 땐 차이가 안 보이지만, 습관으로 굳혀두면 테이블이 커져도 정책이 병목이 되지 않는다.
+
+같은 맥락의 권장사항 하나 더: 정책에 `TO authenticated`를 지정하면 **비로그인(anon) 요청은 정책 평가 자체를 스킵**한다. 로그인 사용자 전용 테이블이면 붙여두는 게 이득이다.
 
 ### 덤 — 복합 UNIQUE가 있으면 선두 컬럼 단독 인덱스는 중복
 
