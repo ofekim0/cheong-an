@@ -11,16 +11,22 @@
  *   4. 목록 기반 크롤 + view.do 보강으로 신규 detail 확보 (ADR 002/003/007).
  *   5. announcements UPSERT (불변식 위반 row는 이미 invalidBoardIds로 격리됨).
  *   6. crawl_state.last_board_id / last_crawled_at 갱신.
- *   7. JSON 응답: { newCount, skippedBoardIds, invalidBoardIds, latestBoardId }.
+ *   7. 신규 공고가 있으면 구독 계정에 웹 푸시 발송 (9-c, ADR 008).
+ *   8. JSON 응답: { newCount, skippedBoardIds, invalidBoardIds, latestBoardId, push }.
  *
  * 환경변수:
  *   - CRON_SECRET (필수): Bearer 인증.
  *   - CANARY_BOARD_ID (선택): 디테일 카나리에 쓸 안정 boardId. 미설정 시 리스트
  *     불변식만 검증(canary가 console.warn). 모집 종료 후 내려갈 수 있으므로 env로 분리.
+ *   - VAPID_SUBJECT / NEXT_PUBLIC_VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY:
+ *     웹 푸시 발송 자격 증명. 미설정이면 발송만 실패(push.error)하고 크롤은 정상.
  *
  * 에러 매핑:
  *   - 401: 토큰 누락 또는 불일치.
  *   - 500: CRON_SECRET 미설정, 카나리 검증 위반, 또는 크롤러/DB 예외.
+ *   - 푸시 발송 실패는 500이 아니다: 저장·lastBoardId 갱신이 이미 끝난 뒤라
+ *     500을 내면 다음 크롤이 같은 공고를 재발송해 중복 알림이 된다. 유실을
+ *     수용하고 응답의 push.error + 로그로만 남긴다.
  *
  * 캐싱: cron 트리거이므로 dynamic = 'force-dynamic'으로 매 호출 실행 보장.
  */
@@ -29,6 +35,10 @@ import { NextResponse } from 'next/server';
 
 import { crawlNewAnnouncements } from '@/lib/crawler/announcementService';
 import { runCanary } from '@/lib/crawler/canary';
+import {
+  dispatchNewAnnouncementNotifications,
+  type DispatchResult,
+} from '@/lib/push/notificationService';
 import { upsertAnnouncements } from '@/lib/supabase/announcementsRepository';
 import { getSupabaseAdminClient } from '@/lib/supabase/client';
 import {
@@ -80,11 +90,28 @@ export async function GET(request: Request): Promise<NextResponse> {
     await upsertAnnouncements(client, newDetails);
     await updateLastBoardId(client, latestBoardId);
 
+    // 발송은 저장·lastBoardId 갱신이 끝난 뒤에만 시도한다. 반대로 하면 발송
+    // 장애 시 다음 크롤이 같은 공고를 재감지해 중복 알림이 되므로, "알림 1회
+    // 유실 가능"을 수용하는 쪽을 택했다 (ADR 008). 신규가 없으면 서비스가
+    // 채널 조회 없이 no-op.
+    let push: DispatchResult | { error: string };
+    try {
+      push = await dispatchNewAnnouncementNotifications({
+        client,
+        details: newDetails,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      console.error('[cron/crawl] 푸시 발송 실패:', err);
+      push = { error: message };
+    }
+
     return NextResponse.json({
       newCount: newDetails.length,
       skippedBoardIds,
       invalidBoardIds,
       latestBoardId,
+      push,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';

@@ -15,3 +15,15 @@ export interface PushSubscriptionJson {
     auth: string;
   };
 }
+
+/**
+ * 발송(9-c) 대상 배달 채널 — L2 push_subscriptions 한 row의 도메인 표현.
+ * web-push sendNotification에 필요한 값 + 발송 결과 귀속용 userId.
+ */
+export interface PushDeliveryChannel {
+  /** 채널 소유 계정 (L1 enabled 판정의 기준) */
+  userId: string;
+  endpoint: string;
+  p256dh: string;
+  auth: string;
+}
