@@ -17,6 +17,8 @@ Sprint 2 1번 작업(웹 푸시 파이프라인, #39)을 Step(9-a~d)으로 쪼�
 
 **9-c 완료·머지**(PR #58, 2026-07-20): 크롤 신규 감지 → 웹 푸시 발송 연결. `pushChannelsRepository`(L1 `enabled` 계정의 L2 채널 조회 + 만료 endpoint 삭제) + `buildNotificationPayload`(1건은 공고 제목 + soco `view.do` URL, N건은 집계 알림 — 내부 상세 페이지가 생기면 이 모듈의 URL 빌더만 교체) + `webPushClient`(`web-push` 어댑터, 실패를 statusCode 포함 결과 값으로 정규화) + `notificationService`(채널별 격리 발송 + `410`/`404` endpoint 정리 + `{sent, expired, failed}` 집계). `/api/cron/crawl`은 저장·`lastBoardId` 갱신 **완료 후** 발송하고, 발송 실패는 500이 아닌 응답 `push.error`로만 표면화(500이면 호출자 재시도 → 같은 공고 중복 발송이므로 유실을 수용 — ADR 008). 학습 문서: 웹 푸시 정리 **작성 완료**(`docs/learning/step9-web-push.md`).
 
+**외부 선결 완료 + 실환경 수동 검증 성공**(2026-07-20): 외부 선결 3종(OAuth 콘솔·provider 설정 / 00002 마이그레이션 적용 / VAPID env 로컬·Vercel 주입) 모두 완료. 카카오 이메일(account_email)은 **비즈 앱 전용 권한**이라 동의항목에서 제외하고 Supabase Kakao provider의 **"Allow users without an email"** 로 대응 — 파이프라인은 email이 아닌 `user_id` 기준이라 영향 없음(이메일 알림 도입 시 카카오 사용자는 수신 주소 부재 유의). 검증: 로컬에서 구글 로그인 → 구독 토글 ON(L1·L2 row 생성 확인) → `last_board_id` 하향 후 크롤 트리거 → `push: {sent: 1}` + Chrome 알림 수신까지 **MVP 핵심 경로 관통 확인**. 이 과정에서 두 이슈를 밟고 해소: ① Supabase Redirect URLs를 경로 고정형에서 **globstar(`/**`)로 교체**(쿼리 파라미터 붙는 redirectTo가 매칭 실패 → Site URL 루트로 낙하하던 문제), ② **Supabase의 새 테이블 자동 GRANT 폐기**(2026-05-30~)로 `permission denied for table` — GRANT 명시로 해소, 마이그레이션 파일 백필 + RLS 학습 문서 §2 보강(이 커밋).
+
 ### ✅ 해소됨 — 크롤 파이프라인 동결 (Issue #42, 2026-06-18)
 
 매시간 HTTP 500으로 동결됐던 크롤 파이프라인을 PR #45로 해소(프로덕션 500→200, DB 저장 검증). 근본 원인(boardId가 여러 게시판이 공유하는 전역 시퀀스 → gap-fill이 타 게시판 불량 row를 끌어와 배치 upsert 전체 실패)과 수정(gap-fill 폐기 → 목록 기반 크롤 전환)은 **ADR 007** 및 `docs/troubleshooting/2026-06-09-cron-bootstrap-catch-up.md`에 상세.
@@ -50,15 +52,13 @@ Sprint 2 1번 작업(웹 푸시 파이프라인, #39)을 Step(9-a~d)으로 쪼�
 
 ### 다음 할 일 — Sprint 2 (PROJECT_PLAN 4-1 참조)
 
-웹 푸시 발송(9-c: PR #58)까지 **머지 완료** — #39의 코드 경로(구독→저장→발송)가 전부 연결됐다 → 다음은 **9-d**. 단, 9-d는 실환경 E2E이므로 아래 외부 선결이 **선행 조건**이다(이전 Step들과 달리 미설정 시 진행 불가).
-
-- **외부 선결(#50 로그인 실제 E2E 전제, 사용자 작업)**: Supabase 대시보드 Google·Kakao provider 활성화 + client_id/secret + redirect allow-list / 구글·카카오 콘솔 OAuth 앱 등록 / env `NEXT_PUBLIC_SUPABASE_URL`·`NEXT_PUBLIC_SUPABASE_ANON_KEY` 주입(로컬 + Vercel).
-- **외부 선결(9-b 실동작 전제, 사용자 작업)**: `supabase/migrations/00002_create_push_subscriptions.sql`을 Supabase에 적용(대시보드 SQL Editor 또는 `supabase db push`).
-- **외부 선결(9-c 실발송 전제, 사용자 작업)**: VAPID 키 쌍 생성(`npx web-push generate-vapid-keys`) 후 env `NEXT_PUBLIC_VAPID_PUBLIC_KEY`·`VAPID_PRIVATE_KEY`·`VAPID_SUBJECT` 주입(로컬 + Vercel). 키 쌍은 로테이션하면 기존 구독이 전부 무효가 되므로 한 번 만들면 유지(`learning/step9-web-push` §2).
+웹 푸시 발송(9-c: PR #58) 머지 + **외부 선결 3종·실환경 수동 검증까지 완료**(위 문단) → **9-d 착수 조건 충족**. 프로덕션도 VAPID env 주입 완료로 매시간 GHA cron이 실운영 발송을 수행하는 상태다.
 
 웹 푸시 파이프라인 (#39) 남은 Step:
 
-- 9-d (다음): Playwright E2E (로그인 → 구독 → 신규 공고 → 알림 수신). 위 외부 선결 3종 완료 후 착수.
+- 9-d (다음): Playwright E2E (로그인 → 구독 → 신규 공고 → 알림 수신). 수동으로 검증한 경로의 자동화.
+
+운영 참고: VAPID 키 쌍은 로테이션하면 기존 구독이 전부 무효가 되므로 한 번 만들면 유지한다(`learning/step9-web-push` §2).
 
 **9-a 머지 코드**: `usePushSubscription` 훅·`urlBase64ToUint8Array`·`sw.js`는 인증과 분리돼 무변경 재사용. `/subscribe` 게이팅은 **50-b에서 완료**(비로그인 시 로그인 유도, 로그인 시 구독 UI 노출).
 
