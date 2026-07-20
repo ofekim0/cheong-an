@@ -1,6 +1,6 @@
 # Supabase RLS — 소유권을 DB가 강제하게 만드는 법
 
-사용자 소유 데이터(구독, 설정, 북마크 …)를 저장할 때 "내 row만 읽고 쓸 수 있다"를 **애플리케이션 코드가 아니라 DB가** 강제하게 만드는 게 RLS(Row Level Security)다. 이 문서는 RLS를 처음 실전 적용하며 확인한 **어느 프로젝트에나 가져갈 수 있는 패턴 5가지**를 추린다. 청안 고유 결정(어떤 테이블에 어떤 정책을 붙였나, L1/L2 분리 모델)은 ADR 008 소관이다.
+사용자 소유 데이터(구독, 설정, 북마크 …)를 저장할 때 "내 row만 읽고 쓸 수 있다"를 **애플리케이션 코드가 아니라 DB가** 강제하게 만드는 게 RLS(Row Level Security)다. 이 문서는 RLS를 처음 실전 적용하며 확인한 **어느 프로젝트에나 가져갈 수 있는 패턴들**을 추린다. 청안 고유 결정(어떤 테이블에 어떤 정책을 붙였나, L1/L2 분리 모델)은 ADR 008 소관이다.
 
 ---
 
@@ -17,7 +17,39 @@ RLS 정책:    DB가 모든 쿼리에 자동 적용 → 앱 코드가 실수해�
 
 ---
 
-## 2. 정책의 해부 — USING과 WITH CHECK는 검사 시점이 다르다
+## 2. GRANT — RLS보다 한 층 아래에 문이 하나 더 있다
+
+RLS는 접근 제어의 **두 번째** 층이다. 그 아래에 테이블 레벨 권한(GRANT)이 먼저 있다:
+
+| 층        | 단위 | 통과 못 하면                                      |
+| --------- | ---- | ------------------------------------------------- |
+| 1층 GRANT | role | **명시적 에러** `permission denied for table ...` |
+| 2층 RLS   | row  | 조용히 "없는 row" (§1)                            |
+
+증상이 서로 달라서 진단 포인트가 된다 — **"permission denied for table"은 RLS 거부가 아니라 GRANT 부재**다. RLS 정책을 아무리 들여다봐도 원인이 안 나온다.
+
+과거 Supabase는 새 테이블에 `anon`/`authenticated`/`service_role` GRANT를 자동 부여해서 이 층을 의식할 일이 없었지만, **2026-05-30부터 신규 프로젝트에서 자동 노출을 기본 폐기**했고 기존 프로젝트도 2026-10-30부터 강제된다(보안상 opt-in으로 전환). 이제 마이그레이션에 GRANT를 명시하는 것이 필수다:
+
+```sql
+-- "GRANT로 열고 RLS로 잠근다" — Supabase 표준 구성
+GRANT SELECT, INSERT, UPDATE, DELETE ON my_table
+  TO anon, authenticated, service_role;
+ALTER TABLE my_table ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ...;
+```
+
+GRANT를 열어도 row 접근은 여전히 RLS가 통제하므로 보안이 약해지지 않는다. 현재 권한 상태 진단은:
+
+```sql
+SELECT grantee, privilege_type FROM information_schema.role_table_grants
+WHERE table_name = 'my_table';
+```
+
+실제로 9-c 실환경 검증에서 이 문제를 밟았다 — 정책 8개가 전부 정상인데 `/subscribe`가 `permission denied for table push_preferences`로 죽었고, 원인은 마이그레이션(GRANT 미명시)이 정책 변경 이후 시점에 적용된 것이었다.
+
+---
+
+## 3. 정책의 해부 — USING과 WITH CHECK는 검사 시점이 다르다
 
 정책마다 조건식이 두 종류인데, **무엇을 검사하느냐**가 다르다:
 
@@ -47,7 +79,7 @@ UPDATE에서 `WITH CHECK`를 생략하면 **`USING`이 WITH CHECK 역할까지 �
 
 ---
 
-## 3. 함정 — UPSERT는 INSERT 정책만으로는 안 된다
+## 4. 함정 — UPSERT는 INSERT 정책만으로는 안 된다
 
 이번에 직접 밟은 함정. UPSERT(`INSERT ... ON CONFLICT DO UPDATE`)는 충돌이 없으면 INSERT지만, **충돌이 나면 내부적으로 UPDATE를 실행**한다. 즉:
 
@@ -61,7 +93,7 @@ INSERT 정책만 있으면 **최초 저장은 성공하고 두 번째부터 실�
 
 ---
 
-## 4. 어떤 클라이언트로 쓰느냐가 곧 보안 모델이다
+## 5. 어떤 클라이언트로 쓰느냐가 곧 보안 모델이다
 
 Supabase 클라이언트는 쓰는 키에 따라 RLS 적용 여부가 갈린다:
 
@@ -76,7 +108,7 @@ Supabase 클라이언트는 쓰는 키에 따라 RLS 적용 여부가 갈린다:
 
 ---
 
-## 5. 성능 습관 — `auth.uid()`는 `(SELECT auth.uid())`로 감싼다
+## 6. 성능 습관 — `auth.uid()`는 `(SELECT auth.uid())`로 감싼다
 
 정책 조건에 함수를 직접 쓰면 **row마다 재평가**될 수 있다. 서브쿼리로 감싸면 PostgreSQL이 initPlan으로 **쿼리당 1회 평가 후 캐시**한다:
 
@@ -98,7 +130,7 @@ RLS와 직접 관련은 없지만 같은 마이그레이션에서 배운 것: `U
 
 ---
 
-## 6. 테스트 관점
+## 7. 테스트 관점
 
 RLS 정책 자체는 단위 테스트로 검증할 수 없다(정책은 DB에 산다). 역할 분담:
 
@@ -108,9 +140,10 @@ RLS 정책 자체는 단위 테스트로 검증할 수 없다(정책은 DB에 �
 
 ---
 
-## 7. 참고
+## 8. 참고
 
 - Supabase RLS 가이드: https://supabase.com/docs/guides/database/postgres/row-level-security
+- Supabase 자동 노출 폐기 공지 (GRANT 명시 필수화): https://supabase.com/changelog/45329-breaking-change-tables-not-exposed-to-data-and-graphql-api-automatically
 - PostgreSQL CREATE POLICY: https://www.postgresql.org/docs/current/sql-createpolicy.html
 - RLS 성능 권장사항 (`(SELECT auth.uid())` 패턴): https://supabase.com/docs/guides/troubleshooting/rls-performance-and-best-practices-Z5Jjwv
 - PostgreSQL 복합 인덱스와 leftmost prefix: https://www.postgresql.org/docs/current/indexes-multicolumn.html

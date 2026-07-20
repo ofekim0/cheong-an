@@ -33,6 +33,15 @@ CREATE TABLE push_subscriptions (
 -- UNIQUE(user_id, endpoint)가 만든 복합 인덱스의 선두 컬럼이 커버하므로
 -- (leftmost prefix) user_id 단독 인덱스는 두지 않는다.
 
+-- 테이블 권한(GRANT): Supabase가 2026-05-30부터 새 테이블의 자동 노출
+-- (anon/authenticated/service_role 자동 GRANT)을 폐기 중이라 명시가 필수다
+-- (미부여 시 RLS 이전 단계에서 "permission denied for table"로 거부된다).
+-- row 접근 통제는 아래 RLS가 담당한다 — "GRANT로 열고 RLS로 잠근다".
+GRANT SELECT, INSERT, UPDATE, DELETE ON push_preferences
+  TO anon, authenticated, service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON push_subscriptions
+  TO anon, authenticated, service_role;
+
 -- updated_at 자동 갱신 (00001의 update_updated_at() 재사용)
 CREATE TRIGGER push_preferences_updated_at
   BEFORE UPDATE ON push_preferences
