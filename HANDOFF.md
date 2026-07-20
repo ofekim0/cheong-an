@@ -5,7 +5,7 @@
 
 ---
 
-## 0. 최신 상태 (2026-07-13 기준)
+## 0. 최신 상태 (2026-07-20 기준)
 
 ### 진행 중 — Sprint 2 웹 푸시 알림 (#39) + 소셜 로그인 신규 편입
 
@@ -14,6 +14,8 @@ Sprint 2 1번 작업(웹 푸시 파이프라인, #39)을 Step(9-a~d)으로 쪼�
 **방향 전환(2026-06-25)**: 9-b 설계 중 서비스를 **로그인 사용자 기준**으로 운영하기로 결정 — 구독·발송·필터를 처음부터 `user_id`로 묶는다. 익명으로 먼저 만들면 나중에 user 연결 마이그레이션 + 고아 구독 정리로 두 번 일하므로, 순서를 바꿔 **소셜 로그인을 9-b 앞에 신규 편입**한다(근거: **ADR 009**). 이에 따라 ADR 008은 익명 → user 연결 모델로 **재작성**했고(`user_id` FK + RLS, endpoint UNIQUE·`410 Gone`은 유지), PROJECT_PLAN Sprint 2에 로그인을 편입했다(#50). 소셜 로그인은 50-a(SSR 기반)·50-b(로그인 UI + 게이팅)로 분할했고 **둘 다 머지 완료**(50-a PR #52, 50-b PR #53). #50은 코드 기준 완결이며 실제 OAuth 로그인 E2E만 외부 설정(대시보드·콘솔·env) 후 남는다. 학습 문서: `@supabase/ssr` SSR 패턴은 **작성 완료**(`docs/learning/step50-supabase-ssr-auth.md`), 웹 푸시(`step9-web-push.md`)는 발송까지 완결되는 9-c 시점에 작성 예정.
 
 **9-b 완료·머지**(PR #55, 2026-07-13): 구독 상태를 **계정의 속성**으로 재설계 — 구독 의사(L1 `push_preferences`, 계정당 1 row + `enabled`)와 배달 채널(L2 `push_subscriptions`, `UNIQUE(user_id, endpoint)`)을 분리해 같은 기기의 계정 간 독립 + 같은 계정의 기기 간 공유를 동시에 충족. `POST /api/push/subscribe`(L2 UPSERT + L1 ON)·`DELETE`(L1 OFF만) + 구독 토글 UI + 마운트 재동기화(공유 브라우저에서 타 계정 채널 오판 갭 차단)까지 연결. 이 과정에서 ADR 008을 **2차 재작성** — 직전의 "endpoint 단독 UNIQUE + 409 소유권" 모델은 폐기(위 문단의 "endpoint UNIQUE 유지" 서술은 이 시점부로 무효). 학습 문서: Supabase RLS 정리 **작성 완료**(`docs/learning/step9b-supabase-rls.md`).
+
+**9-c 완료·머지**(PR #58, 2026-07-20): 크롤 신규 감지 → 웹 푸시 발송 연결. `pushChannelsRepository`(L1 `enabled` 계정의 L2 채널 조회 + 만료 endpoint 삭제) + `buildNotificationPayload`(1건은 공고 제목 + soco `view.do` URL, N건은 집계 알림 — 내부 상세 페이지가 생기면 이 모듈의 URL 빌더만 교체) + `webPushClient`(`web-push` 어댑터, 실패를 statusCode 포함 결과 값으로 정규화) + `notificationService`(채널별 격리 발송 + `410`/`404` endpoint 정리 + `{sent, expired, failed}` 집계). `/api/cron/crawl`은 저장·`lastBoardId` 갱신 **완료 후** 발송하고, 발송 실패는 500이 아닌 응답 `push.error`로만 표면화(500이면 호출자 재시도 → 같은 공고 중복 발송이므로 유실을 수용 — ADR 008). 학습 문서: 웹 푸시 정리 **작성 완료**(`docs/learning/step9-web-push.md`).
 
 ### ✅ 해소됨 — 크롤 파이프라인 동결 (Issue #42, 2026-06-18)
 
@@ -37,6 +39,7 @@ Sprint 2 1번 작업(웹 푸시 파이프라인, #39)을 Step(9-a~d)으로 쪼�
 | Step 50-a      | 소셜 로그인 SSR 기반 (#50): `@supabase/ssr` browser/server 클라 + 세션 미들웨어 + OAuth 콜백 라우트. typecheck/lint/96 tests (정적·단위)                                                            | ADR 009; PR #52 (로그인 UI·게이팅 50-b)                                                             |
 | Step 50-b      | 소셜 로그인 UI + 구독 게이팅 (#50): 구글·카카오 로그인/로그아웃 + `/subscribe` 게이팅 + `signInWithProvider`·`getSessionUser`. 103 tests (정적·단위, E2E는 외부 OAuth 설정 후)                      | ADR 009; PR #53; `learning/step50-supabase-ssr-auth`                                                |
 | Step 9-b       | 웹 푸시 구독 저장 (#39): L1/L2 분리 스키마(`push_preferences`/`push_subscriptions`, `UNIQUE(user_id, endpoint)`, RLS) + `POST/DELETE /api/push/subscribe` + 구독 토글 UI·마운트 재동기화. 132 tests | ADR 008(2차 재작성); PR #55; `learning/step9b-supabase-rls`                                         |
+| Step 9-c       | 웹 푸시 발송 (#39): 크롤 신규 감지 → L1 `enabled` 계정의 L2 채널 발송(`web-push`) + `410`/`404` 만료 채널 정리 + 크롤 응답에 `push` 집계(발송 실패에도 200 유지). 162 tests                         | ADR 008; PR #58; `learning/step9-web-push`                                                          |
 | 운영·회고      | Sprint 1 운영 검증 (GHA dispatch 2회 success, `last_board_id` 6561 갱신) + Sprint 1 회고                                                                                                            | `retrospectives/sprint-1`                                                                           |
 
 > ADR 전체: `docs/adr/` — 001 기술스택, 002/003 데이터소스·매핑, 004 스케줄러, 005 부트스트랩, 006 크롤 출력 검증, 007 크롤 범위, 008 구독 저장 모델(구독 의사/배달 채널 분리), 009 소셜 로그인.
@@ -47,15 +50,15 @@ Sprint 2 1번 작업(웹 푸시 파이프라인, #39)을 Step(9-a~d)으로 쪼�
 
 ### 다음 할 일 — Sprint 2 (PROJECT_PLAN 4-1 참조)
 
-소셜 로그인(#50: PR #52·#53)과 웹 푸시 구독 저장(9-b: PR #55) **모두 머지 완료** → 다음은 **9-c**.
+웹 푸시 발송(9-c: PR #58)까지 **머지 완료** — #39의 코드 경로(구독→저장→발송)가 전부 연결됐다 → 다음은 **9-d**. 단, 9-d는 실환경 E2E이므로 아래 외부 선결이 **선행 조건**이다(이전 Step들과 달리 미설정 시 진행 불가).
 
-- **외부 선결(#50 로그인 실제 E2E 전제, 사용자 작업)**: Supabase 대시보드 Google·Kakao provider 활성화 + client_id/secret + redirect allow-list / 구글·카카오 콘솔 OAuth 앱 등록 / env `NEXT_PUBLIC_SUPABASE_URL`·`NEXT_PUBLIC_SUPABASE_ANON_KEY` 주입(로컬 + Vercel). 미설정이어도 코드·단위 테스트는 진행 가능.
-- **외부 선결(9-b 실동작 전제, 사용자 작업)**: `supabase/migrations/00002_create_push_subscriptions.sql`을 Supabase에 적용(대시보드 SQL Editor 또는 `supabase db push`). 미적용이어도 코드·단위 테스트는 진행 가능.
+- **외부 선결(#50 로그인 실제 E2E 전제, 사용자 작업)**: Supabase 대시보드 Google·Kakao provider 활성화 + client_id/secret + redirect allow-list / 구글·카카오 콘솔 OAuth 앱 등록 / env `NEXT_PUBLIC_SUPABASE_URL`·`NEXT_PUBLIC_SUPABASE_ANON_KEY` 주입(로컬 + Vercel).
+- **외부 선결(9-b 실동작 전제, 사용자 작업)**: `supabase/migrations/00002_create_push_subscriptions.sql`을 Supabase에 적용(대시보드 SQL Editor 또는 `supabase db push`).
+- **외부 선결(9-c 실발송 전제, 사용자 작업)**: VAPID 키 쌍 생성(`npx web-push generate-vapid-keys`) 후 env `NEXT_PUBLIC_VAPID_PUBLIC_KEY`·`VAPID_PRIVATE_KEY`·`VAPID_SUBJECT` 주입(로컬 + Vercel). 키 쌍은 로테이션하면 기존 구독이 전부 무효가 되므로 한 번 만들면 유지(`learning/step9-web-push` §2).
 
 웹 푸시 파이프라인 (#39) 남은 Step:
 
-- 9-c (다음): 발송 트리거(크롤 신규 감지와 연결) + `web-push` 통합 + L1 `enabled` 계정의 L2 채널 조회(`WHERE user_id`) + `410 Gone` 만료 채널 정리. 모델·근거 **ADR 008**.
-- 9-d: Playwright E2E (로그인 → 구독 → 신규 공고 → 알림 수신)
+- 9-d (다음): Playwright E2E (로그인 → 구독 → 신규 공고 → 알림 수신). 위 외부 선결 3종 완료 후 착수.
 
 **9-a 머지 코드**: `usePushSubscription` 훅·`urlBase64ToUint8Array`·`sw.js`는 인증과 분리돼 무변경 재사용. `/subscribe` 게이팅은 **50-b에서 완료**(비로그인 시 로그인 유도, 로그인 시 구독 UI 노출).
 
