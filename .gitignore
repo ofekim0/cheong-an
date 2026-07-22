@@ -39,6 +39,7 @@ yarn-error.log*
 /playwright-report/
 /blob-report/
 /.playwright-mcp/
+/e2e/.auth/
 
 # vercel
 .vercel
