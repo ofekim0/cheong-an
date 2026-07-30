@@ -19,6 +19,12 @@ export const TEST_USER = {
   password: 'e2e-password-1234!',
 } as const;
 
+/** RLS 남의 row 거부 검증용 2번째 계정. */
+export const SECOND_USER = {
+  email: 'e2e-other@cheong-an.test',
+  password: 'e2e-other-1234!',
+} as const;
+
 export interface TestSupabaseEnv {
   url: string;
   serviceRoleKey: string;
@@ -50,41 +56,105 @@ export function getAdminClient(): SupabaseClient {
   });
 }
 
-/** 이메일로 기존 테스트 유저를 찾는다(없으면 null). */
-async function findTestUser(admin: SupabaseClient): Promise<string | null> {
+/** 이메일로 기존 유저 id를 찾는다(없으면 null). */
+async function findUserIdByEmail(
+  admin: SupabaseClient,
+  email: string,
+): Promise<string | null> {
   const { data, error } = await admin.auth.admin.listUsers();
   if (error) throw error;
-  const found = data.users.find((u) => u.email === TEST_USER.email);
+  const found = data.users.find((u) => u.email === email);
   return found?.id ?? null;
 }
 
 /**
- * 테스트 유저를 멱등 생성한다 — 이미 있으면 그대로 재사용하고 userId를 반환한다.
+ * 유저를 멱등 생성한다 — 이미 있으면 그대로 재사용하고 userId를 반환한다.
  * `email_confirm: true`로 이메일 확인을 건너뛴다(테스트 프로젝트는 provider 설정 없음).
  */
-export async function ensureTestUser(): Promise<string> {
+export async function ensureUser(
+  email: string,
+  password: string,
+): Promise<string> {
   const admin = getAdminClient();
 
   const { data, error } = await admin.auth.admin.createUser({
-    email: TEST_USER.email,
-    password: TEST_USER.password,
+    email,
+    password,
     email_confirm: true,
   });
 
   if (!error && data.user) return data.user.id;
 
   // 이미 존재하는 경우만 조회로 폴백한다. 그 외 오류는 그대로 표면화.
-  const existing = await findTestUser(admin);
+  const existing = await findUserIdByEmail(admin, email);
   if (existing) return existing;
 
   throw new Error(
-    `테스트 유저 생성/조회 실패: ${error?.message ?? '알 수 없는 오류'}`,
+    `테스트 유저 생성/조회 실패(${email}): ${error?.message ?? '알 수 없는 오류'}`,
   );
 }
 
-/** 테스트 유저를 삭제한다(FK CASCADE로 push_preferences/subscriptions도 정리됨). */
-export async function deleteTestUser(): Promise<void> {
+/** 주 테스트 유저를 멱등 생성한다(global.setup 세션 주입 대상). */
+export function ensureTestUser(): Promise<string> {
+  return ensureUser(TEST_USER.email, TEST_USER.password);
+}
+
+/** 유저를 삭제한다(FK CASCADE로 push_preferences/subscriptions도 정리됨). */
+export async function deleteUser(email: string): Promise<void> {
   const admin = getAdminClient();
-  const existing = await findTestUser(admin);
+  const existing = await findUserIdByEmail(admin, email);
   if (existing) await admin.auth.admin.deleteUser(existing);
+}
+
+/** 한 유저의 구독 데이터(L1/L2)를 admin으로 모두 지운다 — 테스트 멱등성 확보용. */
+export async function clearPushData(userId: string): Promise<void> {
+  const admin = getAdminClient();
+  await admin.from('push_subscriptions').delete().eq('user_id', userId);
+  await admin.from('push_preferences').delete().eq('user_id', userId);
+}
+
+/** L1 구독 의사 row(없으면 null). admin(RLS 우회)로 조회. */
+export async function getPushPreferenceRow(
+  userId: string,
+): Promise<{ enabled: boolean } | null> {
+  const admin = getAdminClient();
+  const { data, error } = await admin
+    .from('push_preferences')
+    .select('enabled')
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+/** L2 배달 채널 rows. admin(RLS 우회)로 조회. */
+export async function getPushSubscriptionRows(
+  userId: string,
+): Promise<{ endpoint: string }[]> {
+  const admin = getAdminClient();
+  const { data, error } = await admin
+    .from('push_subscriptions')
+    .select('endpoint')
+    .eq('user_id', userId);
+  if (error) throw error;
+  return data ?? [];
+}
+
+/**
+ * 세션 바인딩 anon 클라이언트 — 지정 유저로 로그인해 RLS가 적용되는 상태를
+ * 만든다(admin과 달리 RLS 우회 안 함). 남의 row 거부 검증에 쓴다.
+ */
+export async function createSessionClient(
+  email: string,
+  password: string,
+): Promise<SupabaseClient> {
+  const { url, anonKey } = getTestSupabaseEnv();
+  const client = createClient(url, anonKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  const { error } = await client.auth.signInWithPassword({ email, password });
+  if (error) {
+    throw new Error(`세션 클라 로그인 실패(${email}): ${error.message}`);
+  }
+  return client;
 }
