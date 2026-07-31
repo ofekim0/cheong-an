@@ -140,6 +140,36 @@ export async function getPushSubscriptionRows(
   return data ?? [];
 }
 
+/** L1 구독 의사 row를 upsert한다(발송 채널 조회 e2e 시드용). */
+export async function setPushPreferenceRow(
+  userId: string,
+  enabled: boolean,
+): Promise<void> {
+  const admin = getAdminClient();
+  const { error } = await admin
+    .from('push_preferences')
+    .upsert({ user_id: userId, enabled }, { onConflict: 'user_id' });
+  if (error) throw error;
+}
+
+/** L2 배달 채널을 시드한다(테스트용 더미 keys). */
+export async function insertPushChannels(
+  userId: string,
+  endpoints: string[],
+): Promise<void> {
+  const admin = getAdminClient();
+  const rows = endpoints.map((endpoint) => ({
+    user_id: userId,
+    endpoint,
+    p256dh: 'e2e-p256dh',
+    auth: 'e2e-auth',
+  }));
+  const { error } = await admin
+    .from('push_subscriptions')
+    .upsert(rows, { onConflict: 'user_id,endpoint' });
+  if (error) throw error;
+}
+
 /**
  * 세션 바인딩 anon 클라이언트 — 지정 유저로 로그인해 RLS가 적용되는 상태를
  * 만든다(admin과 달리 RLS 우회 안 함). 남의 row 거부 검증에 쓴다.
