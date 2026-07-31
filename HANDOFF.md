@@ -19,7 +19,7 @@ Sprint 2 1번 작업(웹 푸시 파이프라인, #39)을 Step(9-a~d)으로 쪼�
 
 **외부 선결 완료 + 실환경 수동 검증 성공**(2026-07-20): 외부 선결 3종(OAuth 콘솔·provider 설정 / 00002 마이그레이션 적용 / VAPID env 로컬·Vercel 주입) 모두 완료. 카카오 이메일(account_email)은 **비즈 앱 전용 권한**이라 동의항목에서 제외하고 Supabase Kakao provider의 **"Allow users without an email"** 로 대응 — 파이프라인은 email이 아닌 `user_id` 기준이라 영향 없음(이메일 알림 도입 시 카카오 사용자는 수신 주소 부재 유의). 검증: 로컬에서 구글 로그인 → 구독 토글 ON(L1·L2 row 생성 확인) → `last_board_id` 하향 후 크롤 트리거 → `push: {sent: 1}` + Chrome 알림 수신까지 **MVP 핵심 경로 관통 확인**. 이 과정에서 두 이슈를 밟고 해소: ① Supabase Redirect URLs를 경로 고정형에서 **globstar(`/**`)로 교체**(쿼리 파라미터 붙는 redirectTo가 매칭 실패 → Site URL 루트로 낙하하던 문제), ② **Supabase의 새 테이블 자동 GRANT 폐기**(2026-05-30~)로 `permission denied for table` — GRANT 명시로 해소, 마이그레이션 파일 백필 + RLS 학습 문서 §2 보강(이 커밋).
 
-**9-d 착수·9-d-a/b 완료·머지**(2026-07-31, PR #61·#62): E2E 자동화 범위를 **"소유 표면"으로 한정**하는 전략을 ADR 010으로 확정하고 9-d-a/b/c로 분할. 9-d-a(PR #61)는 실 OAuth를 우회하는 Playwright **세션 주입 하네스**(admin 유저 생성 + `signInWithPassword` → `@supabase/ssr` 쿠키 캡처 → storageState) + **전용 테스트 Supabase 프로젝트**(마이그레이션 00001·00002 적용, OAuth provider 불필요) + 구독 **게이팅 스펙**. 9-d-b(PR #62)는 **합성 구독**(PushManager 스텁)으로 구독 생성만 결정론화하고 클릭→POST→RLS→**실 DB 쓰기**를 검증 + 구독/해제(L1 enabled 토글, L2 보존) + **RLS 남의 row 거부**. 실 OAuth·실 `pushManager.subscribe` FCM 구독·실 FCM 배달/팝업은 자동화 경계 밖(수동 스모크 유지, ADR 010). 다음은 9-d-c(발송 채널 조회 실 DB e2e + GHA e2e job + 학습 문서).
+**9-d 완료·머지 — #39 웹 푸시 파이프라인 마무리**(2026-07-31, PR #61·#62·#63): E2E 자동화 범위를 **"소유 표면"으로 한정**하는 전략을 ADR 010으로 확정하고 9-d-a/b/c로 분할. 9-d-a(PR #61)는 실 OAuth를 우회하는 Playwright **세션 주입 하네스**(admin 유저 생성 + `signInWithPassword` → `@supabase/ssr` 쿠키 캡처 → storageState) + **전용 테스트 Supabase 프로젝트**(마이그레이션 00001·00002 적용, OAuth provider 불필요) + 구독 **게이팅 스펙**. 9-d-b(PR #62)는 **합성 구독**(PushManager 스텁)으로 구독 생성만 결정론화하고 클릭→POST→RLS→**실 DB 쓰기**를 검증 + 구독/해제(L1 enabled 토글, L2 보존) + **RLS 남의 row 거부**. 9-d-c(PR #63)는 `getEnabledChannels`의 2쿼리 조인을 **실 DB e2e**로 검증(Vitest+MSW 발송 통합은 기존 162 유닛과 중복이라 폐기 — ADR 010 개정) + **GHA e2e job 편입**(repo secrets 4종 + `.nvmrc` 24로 CI Node 20 WebSocket 오류 해소). 실 OAuth·실 `pushManager.subscribe` FCM 구독·실 FCM 배달/팝업은 자동화 경계 밖(수동 스모크 유지, ADR 010). **이로써 #39 웹 푸시 파이프라인(9-a~d) 완료.**
 
 ### ✅ 해소됨 — 크롤 파이프라인 동결 (Issue #42, 2026-06-18)
 
@@ -46,6 +46,7 @@ Sprint 2 1번 작업(웹 푸시 파이프라인, #39)을 Step(9-a~d)으로 쪼�
 | Step 9-c       | 웹 푸시 발송 (#39): 크롤 신규 감지 → L1 `enabled` 계정의 L2 채널 발송(`web-push`) + `410`/`404` 만료 채널 정리 + 크롤 응답에 `push` 집계(발송 실패에도 200 유지). 162 tests                                                | ADR 008; PR #58; `learning/step9-web-push`                                                          |
 | Step 9-d-a     | 웹 푸시 E2E 인증 하네스 (#39): Playwright 세션 주입(admin 유저 + `signInWithPassword` → `@supabase/ssr` 쿠키 → storageState, 실 OAuth 우회) + 전용 테스트 Supabase 프로젝트 + `.env.test` 주입 + 구독 게이팅 스펙. e2e 4/4 | ADR 010; PR #61                                                                                     |
 | Step 9-d-b     | 구독/해제 E2E + RLS 소유권 거부 (#39): 합성 구독(PushManager 스텁)→클릭→POST→RLS→실 DB 쓰기 검증, 해제 시 L1 enabled=false·L2 보존, userA 세션이 userB row 조회 시 빈 결과. e2e 6/6                                        | ADR 008/010; PR #62                                                                                 |
+| Step 9-d-c     | 발송 채널 조회 실 DB E2E + CI 편입 (#39): `getEnabledChannels` 2쿼리 조인 실 DB 검증(enabled 계정 채널 포함/disabled 제외) + GHA e2e job(secrets 4종·Node 24) + 학습 문서. e2e 8/8. **#39 마무리**                         | ADR 010(개정); PR #63                                                                               |
 | 운영·회고      | Sprint 1 운영 검증 (GHA dispatch 2회 success, `last_board_id` 6561 갱신) + Sprint 1 회고                                                                                                                                   | `retrospectives/sprint-1`                                                                           |
 
 > ADR 전체: `docs/adr/` — 001 기술스택, 002/003 데이터소스·매핑, 004 스케줄러, 005 부트스트랩, 006 크롤 출력 검증, 007 크롤 범위, 008 구독 저장 모델(구독 의사/배달 채널 분리), 009 소셜 로그인, 010 E2E 테스트 전략(소유 표면 자동화 + 실 OAuth·FCM 경계).
@@ -56,14 +57,9 @@ Sprint 2 1번 작업(웹 푸시 파이프라인, #39)을 Step(9-a~d)으로 쪼�
 
 ### 다음 할 일 — Sprint 2 (PROJECT_PLAN 4-1 참조)
 
-웹 푸시 발송(9-c: PR #58) 머지 + **외부 선결 3종·실환경 수동 검증까지 완료**(위 문단) → **9-d 착수 조건 충족**. 프로덕션도 VAPID env 주입 완료로 매시간 GHA cron이 실운영 발송을 수행하는 상태다.
+**웹 푸시 파이프라인 (#39) 완료** — 9-a~d 전부 머지. 9-d(E2E 자동화)는 9-d-a(#61 세션 주입 하네스 + 게이팅) / 9-d-b(#62 구독·해제 + RLS 거부) / 9-d-c(#63 발송 채널 실 DB e2e + GHA e2e 편입)로 3분할 완료. 소유 표면만 자동화하고 실 OAuth·실 FCM 배달은 수동 스모크로 남긴 경계는 ADR 010. 프로덕션은 VAPID env 주입 완료로 매시간 GHA cron이 실운영 발송 중.
 
-웹 푸시 파이프라인 (#39) 남은 Step:
-
-- 9-d: Playwright E2E — 수동 검증 경로의 자동화. **소유 표면만 자동화**하고 실 OAuth·실 FCM 배달은 수동 스모크로 유지(ADR 010). 3분할:
-  - 9-d-a ✅ 완료·머지(PR #61): 세션 주입 하네스(실 OAuth 우회) + 전용 테스트 Supabase 프로젝트 + 구독 게이팅 스펙.
-  - 9-d-b ✅ 완료·머지(PR #62): 구독/해제 E2E(합성 구독 → 실 DB row) + RLS 남의 row 거부.
-  - 9-d-c (진행 중): 발송 채널 조회 실 DB e2e(`getEnabledChannels` — Vitest+MSW는 기존 유닛과 중복이라 폐기, ADR 010 개정) + GHA e2e job 편입 + 학습 문서(step9d).
+다음은 **Sprint 2 나머지**(아래):
 
 운영 참고: VAPID 키 쌍은 로테이션하면 기존 구독이 전부 무효가 되므로 한 번 만들면 유지한다(`learning/step9-web-push` §2).
 
