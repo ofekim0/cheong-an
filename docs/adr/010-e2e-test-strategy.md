@@ -1,7 +1,7 @@
 # ADR 010: 웹 푸시 E2E 테스트 전략 — 세션 주입 + 자동화 경계
 
 - **상태**: 승인됨
-- **작성일**: 2026-07-20
+- **작성일**: 2026-07-31 (개정: 발송 절반 검증 방식 조정 — 아래 "개정" 참조)
 - **관련 이슈**: #39 (Step 9-d)
 - **관련 ADR**: 008 (구독 저장 모델), 009 (소셜 로그인)
 
@@ -78,3 +78,12 @@
 - **Step 분할**: 9-d-a(하네스 + 게이팅 스펙) / 9-d-b(구독·해제 + RLS 거부) / 9-d-c(발송 절반 + CI 편입 + 학습 문서). 각 별도 브랜치·PR.
 - **회귀 방지**: "E2E가 왜 소유 표면까지인가"의 근거를 남겨, 이후 실 OAuth·실 FCM 자동화를 무리하게 되살리는 것(fragile 회귀)을 막는다.
 - **수용한 트레이드오프**: 합성 구독을 쓰므로 실 FCM 구독 생성 경로의 회귀는 자동 테스트가 아니라 수동 스모크에서만 잡힌다. 공고 알림의 낮은 민감도와 이미 완료된 실검증으로 MVP에서 수용한다.
+
+## 개정 (2026-07-31, 9-d-c 착수 시점)
+
+원안의 "발송 절반: Vitest + MSW 서버 통합 테스트(크롤러 fetch mock → 신규 감지 → dispatch → `push:{sent:1}` + 만료 정리)"를 재검토한 결과 **기존 유닛과 중복**임을 확인했다:
+
+- 감지→detail 파싱: `announcementService.test`(MSW), route 오케스트레이션·순서·발송 실패 200: `route.test`(7), dispatch 집계·410/404 정리·채널 격리: `notificationService.test`(9), web-push 어댑터: `webPushClient.test`(5), 페이로드: `buildNotificationPayload.test`(4). 계획한 통합 테스트가 검증하려던 단계가 이미 전부 덮여 있다.
+- 유닛이 **원리상 못 덮는 유일한 지점**은 `getEnabledChannels`의 2쿼리 조인이다 — L1 `push_preferences.enabled` 계정 → L2 `push_subscriptions` 채널을 조회하는데, 두 테이블에 직접 FK가 없어(둘 다 `auth.users` 참조) PostgREST 임베딩 조인이 안 돼 애플리케이션이 손으로 2쿼리를 합성한다. 이 조인/필터의 실제 동작은 쿼리 빌더를 mock하는 유닛으로는 검증되지 않고, MSW로 PostgREST 응답을 지어내는 것도 결국 DB를 가짜로 만드는 것이라 무의미하다 — **실 Postgres(전용 테스트 프로젝트)에서만** 검증된다.
+
+**조정**: "Vitest + MSW 발송 통합 테스트"를 **폐기**하고, 대신 `getEnabledChannels`를 실제 함수 그대로 호출하는 **실 DB E2E**(`e2e/sendChannels.spec.ts`)로 대체한다 — L1 enabled 계정의 채널은 포함, disabled 계정의 채널은 제외됨을 시드 데이터로 검증. 발송 로직 나머지는 기존 유닛에 위임한다. 근거: 중복 테스트 회피(RULES: no-duplicate) + 실 DB로만 가능한 검증에 자원 집중.
