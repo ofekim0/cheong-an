@@ -19,12 +19,12 @@ vi.mock(
     };
   },
 );
-vi.mock('@/lib/supabase/pushPreferencesRepository', () => ({
-  setPushPreference: vi.fn(),
+vi.mock('@/lib/supabase/notificationPreferencesRepository', () => ({
+  setChannelPreference: vi.fn(),
 }));
 
 import { getSessionUser } from '@/lib/auth/getSessionUser';
-import { setPushPreference } from '@/lib/supabase/pushPreferencesRepository';
+import { setChannelPreference } from '@/lib/supabase/notificationPreferencesRepository';
 import { upsertPushSubscription } from '@/lib/supabase/pushSubscriptionsRepository';
 import { getSupabaseServerClient } from '@/lib/supabase/serverClient';
 
@@ -62,7 +62,7 @@ beforeEach(() => {
     {} as Awaited<ReturnType<typeof getSupabaseServerClient>>,
   );
   vi.mocked(upsertPushSubscription).mockResolvedValue(undefined);
-  vi.mocked(setPushPreference).mockResolvedValue(undefined);
+  vi.mocked(setChannelPreference).mockResolvedValue(undefined);
 });
 
 describe('POST /api/push/subscribe', () => {
@@ -73,7 +73,7 @@ describe('POST /api/push/subscribe', () => {
 
     expect(response.status).toBe(401);
     expect(upsertPushSubscription).not.toHaveBeenCalled();
-    expect(setPushPreference).not.toHaveBeenCalled();
+    expect(setChannelPreference).not.toHaveBeenCalled();
   });
 
   it('body가 JSON이 아니면 400', async () => {
@@ -109,9 +109,10 @@ describe('POST /api/push/subscribe', () => {
       auth: 'auth-secret',
       user_agent: 'Mozilla/5.0',
     });
-    expect(setPushPreference).toHaveBeenCalledWith(
+    expect(setChannelPreference).toHaveBeenCalledWith(
       expect.anything(),
       USER_ID,
+      'web_push',
       true,
     );
   });
@@ -131,11 +132,11 @@ describe('POST /api/push/subscribe', () => {
     const response = await POST(makeRequest(buildBody()));
 
     expect(response.status).toBe(500);
-    expect(setPushPreference).not.toHaveBeenCalled();
+    expect(setChannelPreference).not.toHaveBeenCalled();
   });
 
   it('L1 설정이 실패해도 500', async () => {
-    vi.mocked(setPushPreference).mockRejectedValue(
+    vi.mocked(setChannelPreference).mockRejectedValue(
       new Error('connection refused'),
     );
 
@@ -152,23 +153,24 @@ describe('DELETE /api/push/subscribe', () => {
     const response = await DELETE();
 
     expect(response.status).toBe(401);
-    expect(setPushPreference).not.toHaveBeenCalled();
+    expect(setChannelPreference).not.toHaveBeenCalled();
   });
 
   it('L1 enabled=false만 설정하고 200 — L2 채널은 건드리지 않는다', async () => {
     const response = await DELETE();
 
     expect(response.status).toBe(200);
-    expect(setPushPreference).toHaveBeenCalledWith(
+    expect(setChannelPreference).toHaveBeenCalledWith(
       expect.anything(),
       USER_ID,
+      'web_push',
       false,
     );
     expect(upsertPushSubscription).not.toHaveBeenCalled();
   });
 
   it('DB 예외면 500', async () => {
-    vi.mocked(setPushPreference).mockRejectedValue(
+    vi.mocked(setChannelPreference).mockRejectedValue(
       new Error('connection refused'),
     );
 

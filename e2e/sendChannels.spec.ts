@@ -1,8 +1,8 @@
 /**
  * 발송 채널 조회 실 DB E2E (9-d-c, ADR 008/010).
  *
- * `getEnabledChannels`는 L1 `push_preferences.enabled = true` 계정의 L2
- * `push_subscriptions` 채널을 조회한다. 두 테이블에 직접 FK가 없어(둘 다
+ * `getEnabledChannels`는 L1 `notification_preferences.web_push_enabled = true`
+ * 계정의 L2 `push_subscriptions` 채널을 조회한다. 두 테이블에 직접 FK가 없어(둘 다
  * auth.users 참조) PostgREST 임베딩 조인이 안 돼 **애플리케이션이 2쿼리로
  * 손수 조인**한다. 이 조인/필터의 실제 동작은 유닛(쿼리 빌더 mock)이 못 덮는
  * 유일한 지점이라 실 DB로만 검증한다 — 발송 로직 나머지(집계·410/404 정리·격리)는

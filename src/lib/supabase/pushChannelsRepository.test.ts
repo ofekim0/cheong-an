@@ -26,7 +26,7 @@ const CHANNEL_ROW_B = {
 
 /**
  * Supabase 메서드 체이닝 mock 헬퍼.
- * - push_preferences: `from().select().eq()` — 종단 eq가 Promise.
+ * - notification_preferences: `from().select().eq()` — 종단 eq가 Promise.
  * - push_subscriptions 조회: `from().select().in()` — 종단 in이 Promise.
  * - push_subscriptions 삭제: `from().delete().eq()` — 종단 eq가 Promise.
  * 테이블명으로 분기해 각 테이블에 다른 결과를 돌려준다.
@@ -52,7 +52,7 @@ function createMockClient(results: {
   const deleteFn = vi.fn().mockReturnValue({ eq: deleteEq });
 
   const from = vi.fn((table: string) =>
-    table === 'push_preferences'
+    table === 'notification_preferences'
       ? { select: prefSelect }
       : { select: channelSelect, delete: deleteFn },
   );
@@ -92,7 +92,7 @@ describe('getEnabledChannels', () => {
 
     const channels = await getEnabledChannels(client);
 
-    expect(prefEq).toHaveBeenCalledWith('enabled', true);
+    expect(prefEq).toHaveBeenCalledWith('web_push_enabled', true);
     expect(channelIn).toHaveBeenCalledWith('user_id', [USER_A, USER_B]);
     expect(channels).toEqual([
       rowToChannel(CHANNEL_ROW_A),
@@ -122,7 +122,7 @@ describe('getEnabledChannels', () => {
     expect(channels).toEqual([]);
   });
 
-  it('push_preferences 조회 에러를 throw로 표면화한다', async () => {
+  it('notification_preferences 조회 에러를 throw로 표면화한다', async () => {
     const { client } = createMockClient({
       preferences: { data: null, error: { message: 'connection refused' } },
     });

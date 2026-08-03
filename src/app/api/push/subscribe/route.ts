@@ -27,7 +27,7 @@
 import { NextResponse } from 'next/server';
 
 import { getSessionUser } from '@/lib/auth/getSessionUser';
-import { setPushPreference } from '@/lib/supabase/pushPreferencesRepository';
+import { setChannelPreference } from '@/lib/supabase/notificationPreferencesRepository';
 import {
   subscriptionToRow,
   upsertPushSubscription,
@@ -87,7 +87,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       request.headers.get('user-agent'),
     );
     await upsertPushSubscription(client, row);
-    await setPushPreference(client, user.userId, true);
+    await setChannelPreference(client, user.userId, 'web_push', true);
 
     return NextResponse.json({ ok: true }, { status: 201 });
   } catch (err) {
@@ -108,7 +108,7 @@ export async function DELETE(): Promise<NextResponse> {
 
   try {
     const client = await getSupabaseServerClient();
-    await setPushPreference(client, user.userId, false);
+    await setChannelPreference(client, user.userId, 'web_push', false);
 
     return NextResponse.json({ ok: true }, { status: 200 });
   } catch (err) {
