@@ -34,7 +34,7 @@ test.describe('구독/해제 (합성 구독 → 실 DB)', () => {
     await clearPushData(userId);
   });
 
-  test('구독 클릭 → L2 채널 + L1 enabled=true, 해제 → enabled=false(L2 보존)', async ({
+  test('구독 클릭 → L2 채널 + L1 web_push_enabled=true, 해제 → false(L2 보존)', async ({
     context,
     page,
   }) => {
@@ -49,15 +49,18 @@ test.describe('구독/해제 (합성 구독 → 실 DB)', () => {
         r.url().includes('/api/push/subscribe') &&
         r.request().method() === 'POST',
     );
-    await page.getByRole('button', { name: '알림 구독' }).click();
+    // '이메일 알림 구독' 버튼과 부분 매칭되지 않도록 exact로 웹 푸시 버튼만 겨냥.
+    await page.getByRole('button', { name: '알림 구독', exact: true }).click();
     expect((await postResp).status()).toBe(201);
     await expect(page.getByText('구독 중')).toBeVisible();
 
-    // 실 DB: L2 채널 1건(합성 endpoint) + L1 enabled=true
+    // 실 DB: L2 채널 1건(합성 endpoint) + L1 web_push_enabled=true
     const subs = await getPushSubscriptionRows(userId);
     expect(subs).toHaveLength(1);
     expect(subs[0].endpoint).toBe(FAKE_SUBSCRIPTION.endpoint);
-    expect(await getPushPreferenceRow(userId)).toMatchObject({ enabled: true });
+    expect(await getPushPreferenceRow(userId)).toMatchObject({
+      web_push_enabled: true,
+    });
 
     // 해제: DELETE 200 → L1 enabled=false, L2는 보존 (ADR 008)
     const deleteResp = page.waitForResponse(
@@ -69,26 +72,29 @@ test.describe('구독/해제 (합성 구독 → 실 DB)', () => {
     expect((await deleteResp).status()).toBe(200);
 
     expect(await getPushPreferenceRow(userId)).toMatchObject({
-      enabled: false,
+      web_push_enabled: false,
     });
     expect(await getPushSubscriptionRows(userId)).toHaveLength(1);
   });
 });
 
 test.describe('RLS — 남의 row는 보이지 않는다', () => {
-  test('userA 세션은 userB의 push_preferences를 조회하지 못한다(에러 아님)', async () => {
+  test('userA 세션은 userB의 notification_preferences를 조회하지 못한다(에러 아님)', async () => {
     await ensureTestUser();
     const userBId = await ensureUser(SECOND_USER.email, SECOND_USER.password);
 
     // userB의 L1 row를 admin(RLS 우회)으로 심는다.
     const admin = getAdminClient();
     await admin
-      .from('push_preferences')
-      .upsert({ user_id: userBId, enabled: true }, { onConflict: 'user_id' });
+      .from('notification_preferences')
+      .upsert(
+        { user_id: userBId, web_push_enabled: true },
+        { onConflict: 'user_id' },
+      );
 
     // 대조군: admin은 userB row가 보인다.
     expect(await getPushPreferenceRow(userBId)).toMatchObject({
-      enabled: true,
+      web_push_enabled: true,
     });
 
     // userA 세션 anon 클라는 userB row가 "없는 것처럼" 보인다 — 권한 에러가
@@ -98,7 +104,7 @@ test.describe('RLS — 남의 row는 보이지 않는다', () => {
       TEST_USER.password,
     );
     const { data, error } = await asUserA
-      .from('push_preferences')
+      .from('notification_preferences')
       .select('*')
       .eq('user_id', userBId);
 
@@ -106,6 +112,9 @@ test.describe('RLS — 남의 row는 보이지 않는다', () => {
     expect(data).toEqual([]);
 
     // 정리.
-    await admin.from('push_preferences').delete().eq('user_id', userBId);
+    await admin
+      .from('notification_preferences')
+      .delete()
+      .eq('user_id', userBId);
   });
 });

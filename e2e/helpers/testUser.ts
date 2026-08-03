@@ -99,7 +99,7 @@ export function ensureTestUser(): Promise<string> {
   return ensureUser(TEST_USER.email, TEST_USER.password);
 }
 
-/** 유저를 삭제한다(FK CASCADE로 push_preferences/subscriptions도 정리됨). */
+/** 유저를 삭제한다(FK CASCADE로 notification_preferences/push_subscriptions도 정리됨). */
 export async function deleteUser(email: string): Promise<void> {
   const admin = getAdminClient();
   const existing = await findUserIdByEmail(admin, email);
@@ -110,17 +110,17 @@ export async function deleteUser(email: string): Promise<void> {
 export async function clearPushData(userId: string): Promise<void> {
   const admin = getAdminClient();
   await admin.from('push_subscriptions').delete().eq('user_id', userId);
-  await admin.from('push_preferences').delete().eq('user_id', userId);
+  await admin.from('notification_preferences').delete().eq('user_id', userId);
 }
 
-/** L1 구독 의사 row(없으면 null). admin(RLS 우회)로 조회. */
+/** L1 웹 푸시 구독 의사 row(없으면 null). admin(RLS 우회)로 조회. */
 export async function getPushPreferenceRow(
   userId: string,
-): Promise<{ enabled: boolean } | null> {
+): Promise<{ web_push_enabled: boolean } | null> {
   const admin = getAdminClient();
   const { data, error } = await admin
-    .from('push_preferences')
-    .select('enabled')
+    .from('notification_preferences')
+    .select('web_push_enabled')
     .eq('user_id', userId)
     .maybeSingle();
   if (error) throw error;
@@ -140,15 +140,18 @@ export async function getPushSubscriptionRows(
   return data ?? [];
 }
 
-/** L1 구독 의사 row를 upsert한다(발송 채널 조회 e2e 시드용). */
+/** L1 웹 푸시 구독 의사 row를 upsert한다(발송 채널 조회 e2e 시드용). */
 export async function setPushPreferenceRow(
   userId: string,
   enabled: boolean,
 ): Promise<void> {
   const admin = getAdminClient();
   const { error } = await admin
-    .from('push_preferences')
-    .upsert({ user_id: userId, enabled }, { onConflict: 'user_id' });
+    .from('notification_preferences')
+    .upsert(
+      { user_id: userId, web_push_enabled: enabled },
+      { onConflict: 'user_id' },
+    );
   if (error) throw error;
 }
 
