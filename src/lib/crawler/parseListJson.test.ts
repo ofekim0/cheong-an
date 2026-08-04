@@ -111,6 +111,69 @@ describe('parseListJson', () => {
     expect(() => parseListJson(bad)).toThrow(ParseListJsonError);
   });
 
+  it('optn5가 null이면 제목으로 폴백한다 — 추가모집 미포함은 initial (#68, boardId 6624 재현)', () => {
+    const missing = JSON.stringify({
+      resultList: [
+        {
+          boardId: 6624,
+          nttSj: '[공공임대] 2026년 2차 청년안심주택 모집공고',
+          content: '',
+          optn1: '',
+          optn2: '1',
+          optn3: '',
+          optn4: '',
+          optn5: null,
+          atchFileId: '',
+          regDate: 0,
+        },
+      ],
+    });
+    const [item] = parseListJson(missing);
+    expect(item.recruitmentType).toBe('initial');
+  });
+
+  it('optn5가 null이고 제목에 추가모집이 있으면 additional로 폴백한다', () => {
+    const missing = JSON.stringify({
+      resultList: [
+        {
+          boardId: 1,
+          nttSj: '[민간임대] 어딘가역 추가모집공고',
+          content: '',
+          optn1: '',
+          optn2: '2',
+          optn3: '',
+          optn4: '',
+          optn5: null,
+          atchFileId: '',
+          regDate: 0,
+        },
+      ],
+    });
+    const [item] = parseListJson(missing);
+    expect(item.recruitmentType).toBe('additional');
+  });
+
+  it('optn5가 빈 문자열이어도 제목 폴백을 태운다', () => {
+    const blank = JSON.stringify({
+      resultList: [
+        {
+          boardId: 1,
+          nttSj: 'X',
+          content: '',
+          optn1: '',
+          optn2: '1',
+          optn3: '',
+          optn4: '',
+          optn5: '  ',
+          atchFileId: '',
+          regDate: 0,
+        },
+      ],
+    });
+    const [item] = parseListJson(blank);
+    expect(item.recruitmentType).toBe('initial');
+  });
+
   it('잘못된 JSON은 ParseListJsonError로 던진다', () => {
     expect(() => parseListJson('not json')).toThrow(ParseListJsonError);
   });

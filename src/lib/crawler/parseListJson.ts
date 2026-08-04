@@ -100,7 +100,7 @@ function toListItem(
     boardId: item.boardId,
     title: item.nttSj.trim(),
     announcementType: toAnnouncementType(item.optn2, index),
-    recruitmentType: toRecruitmentType(item.optn5, index),
+    recruitmentType: toRecruitmentType(item.optn5, item.nttSj, index),
     agency: nullIfEmpty(item.optn3),
     postDate: toKstDateString(item.regDate),
     applicationStartDate: nullIfEmpty(item.optn1),
@@ -123,12 +123,20 @@ function toAnnouncementType(
 
 function toRecruitmentType(
   value: string | null,
+  title: string,
   index: number,
 ): RecruitmentType {
   if (value === '1') return 'initial';
   if (value === '2') return 'additional';
+  // 미기재(null/빈 값)는 실측된 상태다 — boardId 6624(2026-08, 공공임대)가
+  // optn5 없이 게시돼 크롤이 동결됐다(#68). parseDetailPage와 동일한 제목
+  // 휴리스틱으로 폴백한다. 미기재가 아닌 미지의 코드는 분류 체계 변경
+  // 신호이므로 기존대로 throw해 카나리가 잡게 한다.
+  if (value == null || value.trim() === '') {
+    return title.includes('추가모집') ? 'additional' : 'initial';
+  }
   throw new ParseListJsonError(
-    `resultList[${index}].optn5: unknown recruitment type code "${value ?? ''}"`,
+    `resultList[${index}].optn5: unknown recruitment type code "${value}"`,
   );
 }
 
