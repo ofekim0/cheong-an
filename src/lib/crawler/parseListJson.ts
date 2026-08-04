@@ -99,7 +99,7 @@ function toListItem(
   return {
     boardId: item.boardId,
     title: item.nttSj.trim(),
-    announcementType: toAnnouncementType(item.optn2, index),
+    announcementType: toAnnouncementType(item.optn2, item.nttSj, index),
     recruitmentType: toRecruitmentType(item.optn5, item.nttSj, index),
     agency: nullIfEmpty(item.optn3),
     postDate: toKstDateString(item.regDate),
@@ -112,12 +112,19 @@ function toListItem(
 
 function toAnnouncementType(
   value: string | null,
+  title: string,
   index: number,
 ): AnnouncementType {
   if (value === '1') return 'public';
   if (value === '2') return 'private';
+  // #68(optn5 미기재 → 크롤 동결)의 쌍둥이 예방(#71). 미기재는 parseDetailPage와
+  // 동일한 제목 휴리스틱으로 폴백하고, 미지의 코드는 분류 체계 변경 신호이므로
+  // 기존대로 throw해 카나리가 잡게 한다.
+  if (value == null || value.trim() === '') {
+    return title.includes('공공임대') ? 'public' : 'private';
+  }
   throw new ParseListJsonError(
-    `resultList[${index}].optn2: unknown announcement type code "${value ?? ''}"`,
+    `resultList[${index}].optn2: unknown announcement type code "${value}"`,
   );
 }
 
