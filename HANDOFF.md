@@ -5,7 +5,7 @@
 
 ---
 
-## 0. 최신 상태 (2026-08-03 기준)
+## 0. 최신 상태 (2026-08-04 기준)
 
 ### 진행 중 — Sprint 2 이메일 알림 채널 (#65)
 
@@ -26,6 +26,10 @@ Sprint 2 1번 작업(웹 푸시 파이프라인, #39)을 Step(9-a~d)으로 쪼�
 **외부 선결 완료 + 실환경 수동 검증 성공**(2026-07-20): 외부 선결 3종(OAuth 콘솔·provider 설정 / 00002 마이그레이션 적용 / VAPID env 로컬·Vercel 주입) 모두 완료. 카카오 이메일(account_email)은 **비즈 앱 전용 권한**이라 동의항목에서 제외하고 Supabase Kakao provider의 **"Allow users without an email"** 로 대응 — 파이프라인은 email이 아닌 `user_id` 기준이라 영향 없음(이메일 알림 도입 시 카카오 사용자는 수신 주소 부재 유의). 검증: 로컬에서 구글 로그인 → 구독 토글 ON(L1·L2 row 생성 확인) → `last_board_id` 하향 후 크롤 트리거 → `push: {sent: 1}` + Chrome 알림 수신까지 **MVP 핵심 경로 관통 확인**. 이 과정에서 두 이슈를 밟고 해소: ① Supabase Redirect URLs를 경로 고정형에서 **globstar(`/**`)로 교체**(쿼리 파라미터 붙는 redirectTo가 매칭 실패 → Site URL 루트로 낙하하던 문제), ② **Supabase의 새 테이블 자동 GRANT 폐기**(2026-05-30~)로 `permission denied for table` — GRANT 명시로 해소, 마이그레이션 파일 백필 + RLS 학습 문서 §2 보강(이 커밋).
 
 **9-d 완료·머지 — #39 웹 푸시 파이프라인 마무리**(2026-07-31, PR #61·#62·#63): E2E 자동화 범위를 **"소유 표면"으로 한정**하는 전략을 ADR 010으로 확정하고 9-d-a/b/c로 분할. 9-d-a(PR #61)는 실 OAuth를 우회하는 Playwright **세션 주입 하네스**(admin 유저 생성 + `signInWithPassword` → `@supabase/ssr` 쿠키 캡처 → storageState) + **전용 테스트 Supabase 프로젝트**(마이그레이션 00001·00002 적용, OAuth provider 불필요) + 구독 **게이팅 스펙**. 9-d-b(PR #62)는 **합성 구독**(PushManager 스텁)으로 구독 생성만 결정론화하고 클릭→POST→RLS→**실 DB 쓰기**를 검증 + 구독/해제(L1 enabled 토글, L2 보존) + **RLS 남의 row 거부**. 9-d-c(PR #63)는 `getEnabledChannels`의 2쿼리 조인을 **실 DB e2e**로 검증(Vitest+MSW 발송 통합은 기존 162 유닛과 중복이라 폐기 — ADR 010 개정) + **GHA e2e job 편입**(repo secrets 4종 + `.nvmrc` 24로 CI Node 20 WebSocket 오류 해소). 실 OAuth·실 `pushManager.subscribe` FCM 구독·실 FCM 배달/팝업은 자동화 경계 밖(수동 스모크 유지, ADR 010). **이로써 #39 웹 푸시 파이프라인(9-a~d) 완료.**
+
+### ✅ 해소됨 — 크롤 동결 2차: optn5 미기재 (Issue #68, 2026-08-04)
+
+2026-08-03 08:31 UTC부터 매시간 500으로 동결됐던 크롤을 PR #69로 해소(프로덕션 200 + 6624 저장 + `push: {sent: 1}` dispatch 검증). 원인: 신규 공고 6624(공공임대)가 `optn5`(모집유형) 미기재로 게시 → `toRecruitmentType` throw가 목록 전체 파싱을 중단. 수정: null/빈 값이면 `parseDetailPage`와 동일한 제목 휴리스틱('추가모집' → additional, 아니면 initial)으로 폴백, 미지의 코드는 기존대로 throw 유지(카나리 감지 경계 보존). 잔여 구조 이슈(한 항목의 매핑 실패가 목록 전체를 죽임 — ADR 007 row 격리와 상충)는 미해소, 필요 시 후속 이슈로 분리.
 
 ### ✅ 해소됨 — 크롤 파이프라인 동결 (Issue #42, 2026-06-18)
 
@@ -54,6 +58,7 @@ Sprint 2 1번 작업(웹 푸시 파이프라인, #39)을 Step(9-a~d)으로 쪼�
 | Step 9-d-b     | 구독/해제 E2E + RLS 소유권 거부 (#39): 합성 구독(PushManager 스텁)→클릭→POST→RLS→실 DB 쓰기 검증, 해제 시 L1 enabled=false·L2 보존, userA 세션이 userB row 조회 시 빈 결과. e2e 6/6                                                                                                                                                                              | ADR 008/010; PR #62                                                                                 |
 | Step 9-d-c     | 발송 채널 조회 실 DB E2E + CI 편입 (#39): `getEnabledChannels` 2쿼리 조인 실 DB 검증(enabled 계정 채널 포함/disabled 제외) + GHA e2e job(secrets 4종·Node 24) + 학습 문서. e2e 8/8. **#39 마무리**                                                                                                                                                               | ADR 010(개정); PR #63                                                                               |
 | 이메일 Step a  | 이메일 채널 스키마 일반화 + opt-in (#65): `push_preferences`→`notification_preferences`(`web_push_enabled`/`email_enabled`, 00003 리네임) + 채널별 리포 + `POST/DELETE /api/notifications/email`(이메일 없는 계정 400 게이팅) + `EmailSubscribeButton`·`/subscribe` 노출 게이팅. 웹 푸시 코드·e2e 새 컬럼 이관. 프로덕션·테스트 DB 적용 완료. 유닛 176 + e2e 8/8 | ADR 011; PR #66 (발송 b·E2E/학습 c)                                                                 |
+| 크롤 동결 2차  | optn5 미기재 공고(6624)로 목록 파서 전면 실패 → 제목 폴백으로 해소 (#68). 프로덕션 200·6624 저장·발송 검증                                                                                                                                                                                                                                                       | PR #69                                                                                              |
 | 운영·회고      | Sprint 1 운영 검증 (GHA dispatch 2회 success, `last_board_id` 6561 갱신) + Sprint 1 회고                                                                                                                                                                                                                                                                         | `retrospectives/sprint-1`                                                                           |
 
 > ADR 전체: `docs/adr/` — 001 기술스택, 002/003 데이터소스·매핑, 004 스케줄러, 005 부트스트랩, 006 크롤 출력 검증, 007 크롤 범위, 008 구독 저장 모델(구독 의사/배달 채널 분리), 009 소셜 로그인, 010 E2E 테스트 전략(소유 표면 자동화 + 실 OAuth·FCM 경계), 011 멀티채널 알림 모델(역량 기반 opt-in + 채널 플러그형 발송).
