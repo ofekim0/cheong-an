@@ -1,9 +1,9 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { dispatchNewAnnouncementNotifications } from './notificationService';
-import { buildNotificationPayload } from './buildNotificationPayload';
-import type { WebPushSendResult } from './webPushClient';
+import { createWebPushAdapter } from './webPushAdapter';
+import { buildNotificationPayload } from '@/lib/push/buildNotificationPayload';
+import type { WebPushSendResult } from '@/lib/push/webPushClient';
 import type { AnnouncementDetail } from '@/types/announcement';
 import type { PushDeliveryChannel } from '@/types/push';
 
@@ -60,18 +60,21 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('dispatchNewAnnouncementNotifications', () => {
+describe('createWebPushAdapter', () => {
+  it('channel은 web_push다 (집계 결과 맵의 키)', () => {
+    expect(createWebPushAdapter().channel).toBe('web_push');
+  });
+
   it('신규 공고가 없으면 채널 조회 없이 no-op', async () => {
     const fetchChannels = vi.fn();
     const sender = vi.fn();
-
-    const result = await dispatchNewAnnouncementNotifications({
-      client: CLIENT,
-      details: [],
+    const adapter = createWebPushAdapter({
       sender,
       fetchChannels,
       removeChannelsByEndpoint: vi.fn(),
     });
+
+    const result = await adapter.dispatch(CLIENT, []);
 
     expect(result).toEqual({ sent: 0, expired: 0, failed: 0 });
     expect(fetchChannels).not.toHaveBeenCalled();
@@ -80,14 +83,13 @@ describe('dispatchNewAnnouncementNotifications', () => {
 
   it('발송 대상 채널이 없으면 no-op', async () => {
     const sender = vi.fn();
-
-    const result = await dispatchNewAnnouncementNotifications({
-      client: CLIENT,
-      details: [DETAIL],
+    const adapter = createWebPushAdapter({
       sender,
       fetchChannels: vi.fn().mockResolvedValue([]),
       removeChannelsByEndpoint: vi.fn(),
     });
+
+    const result = await adapter.dispatch(CLIENT, [DETAIL]);
 
     expect(result).toEqual({ sent: 0, expired: 0, failed: 0 });
     expect(sender).not.toHaveBeenCalled();
@@ -103,14 +105,13 @@ describe('dispatchNewAnnouncementNotifications', () => {
     ];
     const sender = vi.fn().mockResolvedValue(OK);
     const removeChannelsByEndpoint = vi.fn();
-
-    const result = await dispatchNewAnnouncementNotifications({
-      client: CLIENT,
-      details: [DETAIL],
+    const adapter = createWebPushAdapter({
       sender,
       fetchChannels: vi.fn().mockResolvedValue(channels),
       removeChannelsByEndpoint,
     });
+
+    const result = await adapter.dispatch(CLIENT, [DETAIL]);
 
     expect(result).toEqual({ sent: 2, expired: 0, failed: 0 });
     const expectedPayload = buildNotificationPayload([DETAIL]);
@@ -131,14 +132,13 @@ describe('dispatchNewAnnouncementNotifications', () => {
       .mockResolvedValueOnce(OK)
       .mockResolvedValueOnce(GONE);
     const removeChannelsByEndpoint = vi.fn().mockResolvedValue(undefined);
-
-    const result = await dispatchNewAnnouncementNotifications({
-      client: CLIENT,
-      details: [DETAIL],
+    const adapter = createWebPushAdapter({
       sender,
       fetchChannels: vi.fn().mockResolvedValue(channels),
       removeChannelsByEndpoint,
     });
+
+    const result = await adapter.dispatch(CLIENT, [DETAIL]);
 
     expect(result).toEqual({ sent: 1, expired: 1, failed: 0 });
     expect(removeChannelsByEndpoint).toHaveBeenCalledTimes(1);
@@ -151,16 +151,15 @@ describe('dispatchNewAnnouncementNotifications', () => {
   it('404도 만료로 간주해 정리한다 (FCM 만료 응답)', async () => {
     const sender = vi.fn().mockResolvedValue(NOT_FOUND);
     const removeChannelsByEndpoint = vi.fn().mockResolvedValue(undefined);
-
-    const result = await dispatchNewAnnouncementNotifications({
-      client: CLIENT,
-      details: [DETAIL],
+    const adapter = createWebPushAdapter({
       sender,
       fetchChannels: vi
         .fn()
         .mockResolvedValue([createChannel({ endpoint: 'https://push/aaa' })]),
       removeChannelsByEndpoint,
     });
+
+    const result = await adapter.dispatch(CLIENT, [DETAIL]);
 
     expect(result).toEqual({ sent: 0, expired: 1, failed: 0 });
     expect(removeChannelsByEndpoint).toHaveBeenCalledWith(
@@ -180,14 +179,13 @@ describe('dispatchNewAnnouncementNotifications', () => {
       .mockResolvedValueOnce(SERVER_ERROR)
       .mockResolvedValueOnce(OK);
     const removeChannelsByEndpoint = vi.fn();
-
-    const result = await dispatchNewAnnouncementNotifications({
-      client: CLIENT,
-      details: [DETAIL],
+    const adapter = createWebPushAdapter({
       sender,
       fetchChannels: vi.fn().mockResolvedValue(channels),
       removeChannelsByEndpoint,
     });
+
+    const result = await adapter.dispatch(CLIENT, [DETAIL]);
 
     expect(result).toEqual({ sent: 1, expired: 0, failed: 1 });
     expect(sender).toHaveBeenCalledTimes(2);
@@ -205,14 +203,13 @@ describe('dispatchNewAnnouncementNotifications', () => {
     ];
     const sender = vi.fn().mockResolvedValue(GONE);
     const removeChannelsByEndpoint = vi.fn().mockResolvedValue(undefined);
-
-    const result = await dispatchNewAnnouncementNotifications({
-      client: CLIENT,
-      details: [DETAIL],
+    const adapter = createWebPushAdapter({
       sender,
       fetchChannels: vi.fn().mockResolvedValue(channels),
       removeChannelsByEndpoint,
     });
+
+    const result = await adapter.dispatch(CLIENT, [DETAIL]);
 
     expect(result).toEqual({ sent: 0, expired: 2, failed: 0 });
     expect(removeChannelsByEndpoint).toHaveBeenCalledTimes(1);
@@ -224,16 +221,15 @@ describe('dispatchNewAnnouncementNotifications', () => {
     const removeChannelsByEndpoint = vi
       .fn()
       .mockRejectedValue(new Error('connection refused'));
-
-    const result = await dispatchNewAnnouncementNotifications({
-      client: CLIENT,
-      details: [DETAIL],
+    const adapter = createWebPushAdapter({
       sender,
       fetchChannels: vi
         .fn()
         .mockResolvedValue([createChannel({ endpoint: 'https://push/gone' })]),
       removeChannelsByEndpoint,
     });
+
+    const result = await adapter.dispatch(CLIENT, [DETAIL]);
 
     expect(result).toEqual({ sent: 0, expired: 1, failed: 0 });
     expect(warn).toHaveBeenCalledWith(
@@ -246,15 +242,14 @@ describe('dispatchNewAnnouncementNotifications', () => {
     const sender = vi
       .fn()
       .mockRejectedValue(new Error('VAPID env가 설정되지 않았습니다'));
+    const adapter = createWebPushAdapter({
+      sender,
+      fetchChannels: vi.fn().mockResolvedValue([createChannel({})]),
+      removeChannelsByEndpoint: vi.fn(),
+    });
 
-    await expect(
-      dispatchNewAnnouncementNotifications({
-        client: CLIENT,
-        details: [DETAIL],
-        sender,
-        fetchChannels: vi.fn().mockResolvedValue([createChannel({})]),
-        removeChannelsByEndpoint: vi.fn(),
-      }),
-    ).rejects.toThrow(/VAPID env/);
+    await expect(adapter.dispatch(CLIENT, [DETAIL])).rejects.toThrow(
+      /VAPID env/,
+    );
   });
 });
