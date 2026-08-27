@@ -8,8 +8,13 @@ vi.mock('@/lib/crawler/announcementService', () => ({
 vi.mock('@/lib/crawler/canary', () => ({
   runCanary: vi.fn(),
 }));
-vi.mock('@/lib/push/notificationService', () => ({
-  dispatchNewAnnouncementNotifications: vi.fn(),
+vi.mock('@/lib/notifications/notificationService', () => ({
+  dispatchNotifications: vi.fn(),
+}));
+// 라우트가 기본 어댑터 인스턴스를 import하므로 모듈째 대체한다 —
+// 실제 구현이면 web-push까지 로드되고, 여기선 전달 여부만 검증하면 된다.
+vi.mock('@/lib/notifications/webPushAdapter', () => ({
+  webPushAdapter: { channel: 'web_push', dispatch: vi.fn() },
 }));
 vi.mock('@/lib/supabase/client', () => ({
   getSupabaseAdminClient: vi.fn(),
@@ -24,7 +29,8 @@ vi.mock('@/lib/supabase/crawlStateRepository', () => ({
 
 import { crawlNewAnnouncements } from '@/lib/crawler/announcementService';
 import { runCanary } from '@/lib/crawler/canary';
-import { dispatchNewAnnouncementNotifications } from '@/lib/push/notificationService';
+import { dispatchNotifications } from '@/lib/notifications/notificationService';
+import { webPushAdapter } from '@/lib/notifications/webPushAdapter';
 import { upsertAnnouncements } from '@/lib/supabase/announcementsRepository';
 import { getSupabaseAdminClient } from '@/lib/supabase/client';
 import {
@@ -72,10 +78,8 @@ describe('GET /api/cron/crawl', () => {
     // 기본: 카나리 통과(위반 0건). 위반 케이스는 개별 테스트에서 override.
     vi.mocked(runCanary).mockResolvedValue([]);
     // 기본: 발송 no-op. 발송 케이스는 개별 테스트에서 override.
-    vi.mocked(dispatchNewAnnouncementNotifications).mockResolvedValue({
-      sent: 0,
-      expired: 0,
-      failed: 0,
+    vi.mocked(dispatchNotifications).mockResolvedValue({
+      web_push: { sent: 0, expired: 0, failed: 0 },
     });
   });
 
@@ -142,10 +146,8 @@ describe('GET /api/cron/crawl', () => {
     });
     vi.mocked(upsertAnnouncements).mockResolvedValue();
     vi.mocked(updateLastBoardId).mockResolvedValue();
-    vi.mocked(dispatchNewAnnouncementNotifications).mockResolvedValue({
-      sent: 3,
-      expired: 1,
-      failed: 0,
+    vi.mocked(dispatchNotifications).mockResolvedValue({
+      web_push: { sent: 3, expired: 1, failed: 0 },
     });
 
     const response = await GET(makeRequest('Bearer test-secret'));
@@ -156,7 +158,7 @@ describe('GET /api/cron/crawl', () => {
       skippedBoardIds: [102],
       invalidBoardIds: [],
       latestBoardId: 103,
-      push: { sent: 3, expired: 1, failed: 0 },
+      notifications: { web_push: { sent: 3, expired: 1, failed: 0 } },
     });
 
     expect(getLastBoardId).toHaveBeenCalledWith(client);
@@ -166,9 +168,10 @@ describe('GET /api/cron/crawl', () => {
       buildDetail(103),
     ]);
     expect(updateLastBoardId).toHaveBeenCalledWith(client, 103);
-    expect(dispatchNewAnnouncementNotifications).toHaveBeenCalledWith({
+    expect(dispatchNotifications).toHaveBeenCalledWith({
       client,
       details: [buildDetail(101), buildDetail(103)],
+      adapters: [webPushAdapter],
     });
 
     // getLast → crawl → upsert → updateLast → dispatch 순서 보장
@@ -180,7 +183,7 @@ describe('GET /api/cron/crawl', () => {
       vi.mocked(upsertAnnouncements).mock.invocationCallOrder[0];
     const updateOrder =
       vi.mocked(updateLastBoardId).mock.invocationCallOrder[0];
-    const dispatchOrder = vi.mocked(dispatchNewAnnouncementNotifications).mock
+    const dispatchOrder = vi.mocked(dispatchNotifications).mock
       .invocationCallOrder[0];
     expect(getLastOrder).toBeLessThan(crawlOrder);
     expect(crawlOrder).toBeLessThan(upsertOrder);
@@ -188,7 +191,7 @@ describe('GET /api/cron/crawl', () => {
     expect(updateOrder).toBeLessThan(dispatchOrder);
   });
 
-  it('푸시 발송 실패 시에도 200 유지, push.error로 표면화', async () => {
+  it('채널 발송 실패 시에도 200 유지, notifications.<channel>.error로 표면화', async () => {
     vi.mocked(getSupabaseAdminClient).mockReturnValue(
       {} as unknown as ReturnType<typeof getSupabaseAdminClient>,
     );
@@ -201,23 +204,22 @@ describe('GET /api/cron/crawl', () => {
     });
     vi.mocked(upsertAnnouncements).mockResolvedValue();
     vi.mocked(updateLastBoardId).mockResolvedValue();
-    vi.mocked(dispatchNewAnnouncementNotifications).mockRejectedValue(
-      new Error('VAPID env가 설정되지 않았습니다'),
-    );
-    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    // 채널 실패는 서비스가 격리해 { error }로 돌려준다(throw 없음) —
+    // 라우트는 그 맵을 그대로 응답에 싣는다.
+    vi.mocked(dispatchNotifications).mockResolvedValue({
+      web_push: { error: 'VAPID env가 설정되지 않았습니다' },
+    });
 
     const response = await GET(makeRequest('Bearer test-secret'));
 
     expect(response.status).toBe(200);
     const body = await response.json();
     expect(body.newCount).toBe(1);
-    expect(body.push).toEqual({
-      error: 'VAPID env가 설정되지 않았습니다',
+    expect(body.notifications).toEqual({
+      web_push: { error: 'VAPID env가 설정되지 않았습니다' },
     });
     // 크롤 성공은 이미 확정 — 발송 실패가 저장·상태 갱신을 되돌리지 않는다.
     expect(updateLastBoardId).toHaveBeenCalled();
-
-    errSpy.mockRestore();
   });
 
   it('upsert 실패 시 500 + 메시지 노출, updateLastBoardId 호출 안 됨', async () => {
@@ -243,7 +245,7 @@ describe('GET /api/cron/crawl', () => {
       message: 'db down',
     });
     expect(updateLastBoardId).not.toHaveBeenCalled();
-    expect(dispatchNewAnnouncementNotifications).not.toHaveBeenCalled();
+    expect(dispatchNotifications).not.toHaveBeenCalled();
 
     errSpy.mockRestore();
   });
