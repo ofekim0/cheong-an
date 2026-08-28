@@ -7,15 +7,17 @@
 
 ## 0. 최신 상태 (2026-08-28 기준)
 
-### 진행 중 — Sprint 2 이메일 알림 채널 (#65)
+### ✅ 완료 — Sprint 2 이메일 알림 채널 (#65, 2026-08-28 이슈 닫음)
 
-**웹 푸시 파이프라인(#39, 9-a~d)·소셜 로그인(#50)은 완료·머지**됨(경과는 아래 기록). Sprint 2 두 번째 작업으로 **이메일 알림 채널(#65)**에 착수 — 역량 기반 opt-in(이메일 주소 있는 계정만 이메일 채널 노출, provider 하드코딩 없음) + 채널 플러그형 발송으로 설계하며 궁극 목표 알림톡(Phase 4)의 사전 리팩터링을 겸한다. 근거: **ADR 011**. Step a/b/c로 분할.
+**웹 푸시 파이프라인(#39, 9-a~d)·소셜 로그인(#50)은 완료·머지**됨(경과는 아래 기록). Sprint 2 두 번째 작업 **이메일 알림 채널(#65)**을 완결 — 역량 기반 opt-in(이메일 주소 있는 계정만 이메일 채널 노출, provider 하드코딩 없음) + 채널 플러그형 발송으로 설계하며 궁극 목표 알림톡(Phase 4)의 사전 리팩터링을 겸했다. 근거: **ADR 011**. Step a / b-1 / b-2 / c로 분할, 전부 머지(PR #66·#75·#77·#79). 잔여는 실발송 수동 스모크뿐 — Resend 도메인 미검증 제약(계정 이메일로만 발송 가능, `learning/step65-resend` §4)으로 **도메인 검증 시점으로 연기**. env(`RESEND_API_KEY`·`EMAIL_FROM`)는 주입돼 있고, 조건 미비 상태에서도 이메일 채널만 `notifications.email.error`로 실패하고 크롤·웹푸시는 정상.
 
 **Step a 완료·머지**(PR #66, 2026-08-03): 웹 푸시 전용 L1(`push_preferences`)을 계정 단위 멀티채널 `notification_preferences`로 일반화 — `enabled`→`web_push_enabled`, `email_enabled` 추가(마이그레이션 00003, RENAME으로 정책·트리거·GRANT 승계). `notificationPreferencesRepository`(채널별 `setChannelPreference`/`getChannelPreference` — 해당 채널 컬럼만 UPSERT해 상대 채널 미클로버) + 이메일 opt-in 경로(`POST/DELETE /api/notifications/email`, POST는 이메일 없는 계정 400 게이팅) + `EmailSubscribeButton` + `/subscribe`에 `user.email` 있을 때만 이메일 토글 노출(역량 게이팅). 웹 푸시 코드(`getEnabledChannels`·subscribe route·e2e 스펙)는 새 컬럼명으로 이관(동작 동일). **프로덕션·테스트 Supabase에 00003 적용 완료**. 유닛 176 + e2e 8/8. 발송 연결은 Step b, 학습 문서(Resend)는 발송 완결되는 Step c 시점.
 
 **Step b는 b-1/b-2로 분할**(규모 기준 — 순수 리팩터와 신규 채널을 분리). **Step b-1 완료·머지**(PR #75, 2026-08-27): `notificationService`를 채널 어댑터 순회로 일반화(ADR 011 축2) — `ChannelAdapter` 계약(`{sent, failed, expired}` 집계, 웹푸시/이메일의 만료 정리 비대칭은 `expired`로 흡수) 신설, 9-c 발송 로직을 `webPushAdapter`(`createWebPushAdapter`)로 이동(동작 무변경), 서비스를 `src/lib/notifications/`로 이동 + `dispatchNotifications(adapters)` 격리 순회(채널 throw는 해당 채널만 `{error}`, 격리를 cron try/catch에서 서비스로 승격). cron 응답 `push` → `notifications: {web_push}` 일반화(GHA는 status만 봐 운영 무영향). 유닛 189. Step b 관련 의사결정: 이메일 주소 조회는 `auth.admin.getUserById` 계정별(opt-in 수만큼만 호출), Resend는 공식 SDK 사용. 참고: e2e CI 실패 시 테스트 Supabase(cheong-an-test) pause 여부 먼저 확인(`ENOTFOUND` → 대시보드 Resume — 이번에도 재발).
 
 **Step b-2 완료·머지**(PR #77, 2026-08-28): 이메일 발송 어댑터 — `buildEmailPayload`(1건=제목 subject+`view.do` 링크, N건=개별 나열[이메일은 본문 공간이 있어 웹푸시처럼 안 뭉침], 크롤 1회당 1통, 제목 HTML 이스케이프) + `emailClient`(Resend SDK 얇은 어댑터 — `RESEND_API_KEY`·`EMAIL_FROM` 미설정 throw, 실패를 `{ok, statusCode, message}`로 정규화) + `emailRecipientsRepository`(`email_enabled` 계정 → `auth.admin.getUserById`로 주소 확보, 주소는 미저장·발송 시점 조회[ADR 011 축3], 주소 없는 계정·개별 조회 실패는 스킵) + `emailAdapter`(ChannelAdapter 둘째 구현, 수신자별 격리, `expired`는 항상 0, 실패 로그에 주소 대신 userId) + cron `adapters: [webPushAdapter, emailAdapter]` → 응답 `notifications.email`. env 미설정이면 이메일 채널만 `error`로 표면화되고 크롤·웹푸시 정상(env 주입 전 머지 안전). `resend 6.24.0` 추가. 유닛 213. **이로써 Step b 완결.**
+
+**Step c 완료·머지 — #65 마무리**(PR #79, 2026-08-28): `getEmailRecipients` 실 DB e2e — 2단 조회(`email_enabled` 필터[실 PostgREST] + `auth.admin.getUserById` 주소 확보[실 Auth admin API])는 유닛이 mock으로만 덮어 실 관통을 e2e로 검증(9-d-c `getEnabledChannels` e2e와 같은 논리, ADR 010). 전용 계정 2개 + serial 모드, `setEmailPreferenceRow` 헬퍼 추가. GHA e2e job은 전체 스펙을 돌려 자동 편입(workflow·secrets 무변경 — Resend 미사용). 실 Resend 발송·주소 없는 계정 스킵은 자동화 경계 밖(각각 수동 스모크·유닛). e2e 10/10. 학습 문서 **작성 완료**(`docs/learning/step65-resend.md` — 에러-as-value 어댑터 정규화, 도메인 검증 모델과 미검증 제약, SDK 생성자 모킹 함정).
 
 **아래는 완료된 웹 푸시(#39)·로그인(#50) 경과 기록:**
 
@@ -65,6 +67,7 @@ Sprint 2 1번 작업(웹 푸시 파이프라인, #39)을 Step(9-a~d)으로 쪼�
 | 크롤 동결 2차   | optn5 미기재 공고(6624)로 목록 파서 전면 실패 → 제목 폴백으로 해소 (#68). 프로덕션 200·6624 저장·발송 검증. 쌍둥이 optn2 폴백 예방(#71) 완료, row 격리는 #72로 분리                                                                                                                                                                                              | PR #69·#73                                                                                          |
 | 이메일 Step b-1 | 채널 어댑터 리팩터 (#65): `ChannelAdapter` 계약 + 9-c 발송 로직을 `webPushAdapter`로 이동(동작 무변경) + `notificationService`를 `lib/notifications/`로 이동·어댑터 격리 순회로 일반화 + cron 응답 `push`→`notifications.web_push`. 유닛 189                                                                                                                     | ADR 011 축2; PR #75 (이메일 어댑터 b-2)                                                             |
 | 이메일 Step b-2 | 이메일 발송 어댑터 (#65): `buildEmailPayload`(N건 개별 나열·HTML 이스케이프) + `emailClient`(Resend SDK, 실패 정규화) + `emailRecipientsRepository`(`email_enabled` → `getUserById` 주소 확보, 미저장) + `emailAdapter`(수신자별 격리) + cron 배선 → 응답 `notifications.email`. `resend 6.24.0`. 유닛 213. **Step b 완결**                                      | ADR 011; PR #77 (E2E·학습 문서 c)                                                                   |
+| 이메일 Step c   | 수신자 조회 실 DB e2e + 학습 문서 (#65): `getEmailRecipients` 2단 조회(실 PostgREST + 실 Auth admin API) e2e 2종 + `setEmailPreferenceRow` 헬퍼 + GHA 자동 편입(무변경). 실발송은 자동화 경계 밖. e2e 10/10. **#65 완결·이슈 닫음**                                                                                                                              | ADR 010/011; PR #79; `learning/step65-resend`                                                       |
 | 운영·회고       | Sprint 1 운영 검증 (GHA dispatch 2회 success, `last_board_id` 6561 갱신) + Sprint 1 회고                                                                                                                                                                                                                                                                         | `retrospectives/sprint-1`                                                                           |
 
 > ADR 전체: `docs/adr/` — 001 기술스택, 002/003 데이터소스·매핑, 004 스케줄러, 005 부트스트랩, 006 크롤 출력 검증, 007 크롤 범위, 008 구독 저장 모델(구독 의사/배달 채널 분리), 009 소셜 로그인, 010 E2E 테스트 전략(소유 표면 자동화 + 실 OAuth·FCM 경계), 011 멀티채널 알림 모델(역량 기반 opt-in + 채널 플러그형 발송).
@@ -85,7 +88,8 @@ Sprint 2 1번 작업(웹 푸시 파이프라인, #39)을 Step(9-a~d)으로 쪼�
 
 이후 Sprint 2 나머지:
 
-- 이메일 알림 (#65, ADR 011): **Step a 완료·머지**(스키마 일반화 + opt-in + 게이팅, PR #66) → **Step b-1 완료·머지**(채널 어댑터 리팩터, PR #75) → **Step b-2 완료·머지**(이메일 발송 어댑터, PR #77 — Step b 완결). 다음 **Step c** = 이메일 대상 조회(`getEmailRecipients`) 실 DB e2e + GHA e2e 편입 + Resend 학습 문서(`docs/learning/`) → **#65 마무리**. **외부 선결(코드와 무관하게 필요)**: Resend 계정 + 발신 도메인 검증(또는 테스트용 `onboarding@resend.dev`) + `RESEND_API_KEY`·`EMAIL_FROM` env 주입(로컬·Vercel·CI) → 실발송 수동 스모크(크롤 트리거 → `notifications.email` 확인). env 주입 전에도 이메일 채널만 `error`로 실패하고 크롤·웹푸시는 정상
+- ~~이메일 알림 (#65, ADR 011)~~: **완결·이슈 닫음**(2026-08-28, a→b-1→b-2→c 전부 머지 — 위 "✅ 완료" 섹션). 실발송 수동 스모크만 도메인 검증 시점으로 연기(크롤 트리거 → `notifications.email` 확인, 절차는 `learning/step65-resend` §4의 제약 참고)
+- 크롤 파서 row 격리 (#72): 한 항목의 매핑 실패가 목록 전체를 죽이는 구조 이슈(ADR 007 row 격리와 상충) — 파서 출력 계약 변경(유효+격리 분리 반환) + ADR 작성. "#65 완료 후 착수"로 분리해 둔 것, **지금이 착수 시점**
 - 공고 목록 페이지 (Next.js SSG + ISR)
 - 공고 상세 페이지 (동적 라우트 `[boardId]`)
 - 위 화면 확정 후 UI 디자인 일괄 작업 (v0/Lovable 등)
