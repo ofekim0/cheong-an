@@ -12,9 +12,9 @@
  *   5. announcements UPSERT (불변식 위반 row는 이미 invalidBoardIds로 격리됨).
  *   6. crawl_state.last_board_id / last_crawled_at 갱신.
  *   7. 신규 공고가 있으면 채널 어댑터별로 구독 계정에 발송 (9-c → ADR 011
- *      채널 플러그형. 현재 웹 푸시, 이메일은 Step b-2).
+ *      채널 플러그형. 웹 푸시 + 이메일).
  *   8. JSON 응답: { newCount, skippedBoardIds, invalidBoardIds, latestBoardId,
- *      notifications: { web_push: {...} } }.
+ *      notifications: { web_push: {...}, email: {...} } }.
  *
  * 환경변수:
  *   - CRON_SECRET (필수): Bearer 인증.
@@ -23,6 +23,8 @@
  *   - VAPID_SUBJECT / NEXT_PUBLIC_VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY:
  *     웹 푸시 발송 자격 증명. 미설정이면 해당 채널만 실패
  *     (notifications.web_push.error)하고 크롤은 정상.
+ *   - RESEND_API_KEY / EMAIL_FROM: 이메일 발송 자격 증명. 미설정이면 해당
+ *     채널만 실패(notifications.email.error)하고 크롤·웹 푸시는 정상.
  *
  * 에러 매핑:
  *   - 401: 토큰 누락 또는 불일치.
@@ -38,6 +40,7 @@ import { NextResponse } from 'next/server';
 
 import { crawlNewAnnouncements } from '@/lib/crawler/announcementService';
 import { runCanary } from '@/lib/crawler/canary';
+import { emailAdapter } from '@/lib/notifications/emailAdapter';
 import { dispatchNotifications } from '@/lib/notifications/notificationService';
 import { webPushAdapter } from '@/lib/notifications/webPushAdapter';
 import { upsertAnnouncements } from '@/lib/supabase/announcementsRepository';
@@ -99,7 +102,7 @@ export async function GET(request: Request): Promise<NextResponse> {
     const notifications = await dispatchNotifications({
       client,
       details: newDetails,
-      adapters: [webPushAdapter],
+      adapters: [webPushAdapter, emailAdapter],
     });
 
     return NextResponse.json({

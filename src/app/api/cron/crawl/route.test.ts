@@ -12,9 +12,12 @@ vi.mock('@/lib/notifications/notificationService', () => ({
   dispatchNotifications: vi.fn(),
 }));
 // 라우트가 기본 어댑터 인스턴스를 import하므로 모듈째 대체한다 —
-// 실제 구현이면 web-push까지 로드되고, 여기선 전달 여부만 검증하면 된다.
+// 실제 구현이면 web-push·resend까지 로드되고, 여기선 전달 여부만 검증하면 된다.
 vi.mock('@/lib/notifications/webPushAdapter', () => ({
   webPushAdapter: { channel: 'web_push', dispatch: vi.fn() },
+}));
+vi.mock('@/lib/notifications/emailAdapter', () => ({
+  emailAdapter: { channel: 'email', dispatch: vi.fn() },
 }));
 vi.mock('@/lib/supabase/client', () => ({
   getSupabaseAdminClient: vi.fn(),
@@ -29,6 +32,7 @@ vi.mock('@/lib/supabase/crawlStateRepository', () => ({
 
 import { crawlNewAnnouncements } from '@/lib/crawler/announcementService';
 import { runCanary } from '@/lib/crawler/canary';
+import { emailAdapter } from '@/lib/notifications/emailAdapter';
 import { dispatchNotifications } from '@/lib/notifications/notificationService';
 import { webPushAdapter } from '@/lib/notifications/webPushAdapter';
 import { upsertAnnouncements } from '@/lib/supabase/announcementsRepository';
@@ -80,6 +84,7 @@ describe('GET /api/cron/crawl', () => {
     // 기본: 발송 no-op. 발송 케이스는 개별 테스트에서 override.
     vi.mocked(dispatchNotifications).mockResolvedValue({
       web_push: { sent: 0, expired: 0, failed: 0 },
+      email: { sent: 0, expired: 0, failed: 0 },
     });
   });
 
@@ -148,6 +153,7 @@ describe('GET /api/cron/crawl', () => {
     vi.mocked(updateLastBoardId).mockResolvedValue();
     vi.mocked(dispatchNotifications).mockResolvedValue({
       web_push: { sent: 3, expired: 1, failed: 0 },
+      email: { sent: 2, expired: 0, failed: 0 },
     });
 
     const response = await GET(makeRequest('Bearer test-secret'));
@@ -158,7 +164,10 @@ describe('GET /api/cron/crawl', () => {
       skippedBoardIds: [102],
       invalidBoardIds: [],
       latestBoardId: 103,
-      notifications: { web_push: { sent: 3, expired: 1, failed: 0 } },
+      notifications: {
+        web_push: { sent: 3, expired: 1, failed: 0 },
+        email: { sent: 2, expired: 0, failed: 0 },
+      },
     });
 
     expect(getLastBoardId).toHaveBeenCalledWith(client);
@@ -171,7 +180,7 @@ describe('GET /api/cron/crawl', () => {
     expect(dispatchNotifications).toHaveBeenCalledWith({
       client,
       details: [buildDetail(101), buildDetail(103)],
-      adapters: [webPushAdapter],
+      adapters: [webPushAdapter, emailAdapter],
     });
 
     // getLast → crawl → upsert → updateLast → dispatch 순서 보장
@@ -205,9 +214,11 @@ describe('GET /api/cron/crawl', () => {
     vi.mocked(upsertAnnouncements).mockResolvedValue();
     vi.mocked(updateLastBoardId).mockResolvedValue();
     // 채널 실패는 서비스가 격리해 { error }로 돌려준다(throw 없음) —
-    // 라우트는 그 맵을 그대로 응답에 싣는다.
+    // 라우트는 그 맵을 그대로 응답에 싣는다. 한 채널의 실패가 다른 채널의
+    // 집계를 가리지 않는다.
     vi.mocked(dispatchNotifications).mockResolvedValue({
       web_push: { error: 'VAPID env가 설정되지 않았습니다' },
+      email: { sent: 1, expired: 0, failed: 0 },
     });
 
     const response = await GET(makeRequest('Bearer test-secret'));
@@ -217,6 +228,7 @@ describe('GET /api/cron/crawl', () => {
     expect(body.newCount).toBe(1);
     expect(body.notifications).toEqual({
       web_push: { error: 'VAPID env가 설정되지 않았습니다' },
+      email: { sent: 1, expired: 0, failed: 0 },
     });
     // 크롤 성공은 이미 확정 — 발송 실패가 저장·상태 갱신을 되돌리지 않는다.
     expect(updateLastBoardId).toHaveBeenCalled();
