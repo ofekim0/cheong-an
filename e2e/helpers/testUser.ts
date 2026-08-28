@@ -155,6 +155,21 @@ export async function setPushPreferenceRow(
   if (error) throw error;
 }
 
+/** 이메일 opt-in row를 upsert한다(이메일 수신자 조회 e2e 시드용). */
+export async function setEmailPreferenceRow(
+  userId: string,
+  enabled: boolean,
+): Promise<void> {
+  const admin = getAdminClient();
+  const { error } = await admin
+    .from('notification_preferences')
+    .upsert(
+      { user_id: userId, email_enabled: enabled },
+      { onConflict: 'user_id' },
+    );
+  if (error) throw error;
+}
+
 /** L2 배달 채널을 시드한다(테스트용 더미 keys). */
 export async function insertPushChannels(
   userId: string,
