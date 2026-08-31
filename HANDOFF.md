@@ -7,6 +7,16 @@
 
 ## 0. 최신 상태 (2026-08-31 기준)
 
+### 🔄 진행 중 — 공고 목록 페이지 (#83, Step a 완료)
+
+Sprint 2의 마지막 조각인 **공개 목록 페이지**에 착수했다. Step a(조회 리포지토리) 완료·머지(PR #84), 다음은 **Step b(목록 페이지 셸)**. 알림 파이프라인은 전부 완결됐고 남은 건 "웹에서 확인" 경로다.
+
+**조회 경로는 서버 전용(service role)으로 확정** — 착수 전 확인 결과 `announcements`(마이그레이션 00001)는 GRANT도 RLS도 없어 **anon 키 직접 조회가 401(`42501`)로 막혀 있다**(Supabase 신규 테이블 자동 GRANT 폐기 2026-05-30~, 00002가 갖춘 "GRANT로 열고 RLS로 잠근다" 패턴에서 `announcements`만 누락). 다만 목록 페이지는 SSG + ISR이라 조회가 서버에서만 일어나고 `announcementsRepository`는 이미 `getSupabaseAdminClient()`(RLS 우회)를 쓰므로 **마이그레이션 없이 진행 가능**하다. 공개 읽기 개방(`GRANT SELECT TO anon` + RLS + 전체 허용 SELECT 정책)은 **클라이언트 사이드 필터가 실제로 필요해지는 Sprint 3**으로 미뤘다 — 근거·배제 사유는 #83 본문. ADR은 쓰지 않았다(마이그레이션 추가는 가역적이라 회귀 위험이 없고, 실제로 여는 Sprint 3 시점에 쓰는 게 근거가 명확).
+
+**Step b가 Step a에서 이어받을 계약 2가지**: ① `listAnnouncements(client, { page, pageSize }) → { items, total }`, ② **범위를 벗어난 page는 throw가 아니라 빈 페이지 + 실제 total**이므로 404·리다이렉트 판단은 호출자 몫이다(PostgREST가 offset 초과에 빈 배열이 아닌 `PGRST103`/HTTP 416을 반환하는 것을 리포지토리가 흡수). 정렬은 `post_date DESC, board_id DESC` — `post_date`가 DATE(일 단위)라 실 데이터 68건 중 최소 10개 날짜가 중복이고, 동률을 남기면 페이지 경계 row가 누락·중복된다.
+
+**이슈 정리**(2026-08-31): 완료됐는데 열려 있던 #6(Vercel 연동)·#39(웹 푸시)·#42(크롤 동결)·#50(소셜 로그인)을 근거 코멘트와 함께 닫았다. #50은 카카오 실 브라우저 로그인 스모크만 미검증이며(코드 경로는 provider 무관 동일) 이슈 코멘트에 남겼다. 현재 열린 이슈는 **#83 하나**다.
+
 ### ✅ 완료 — 크롤 파서 row 격리 (#72, 2026-08-31 이슈 닫음)
 
 #68·#42로 두 번 밟은 크롤 동결의 **구조 원인**을 제거했다(PR #81). `parseListJson`이 항목 하나의 매핑 실패에서 목록 전체를 throw로 중단하던 것을 **row 단위 격리**로 전환 — 출력 계약을 `AnnouncementListItem[]` → `{ items, isolated }`로 바꾸고, row 매핑을 try/catch로 감싸 항목 단위 실패는 전부 격리한다(사유·boardId 동반, 명시 shape 가드로 `boardId`·`nttSj`·`regDate` 이상도 읽을 수 있는 사유로 표면화). 이로써 상세 크롤 경로에만 있던 row 격리(ADR 007)와 목록 경로가 대칭이 됐다.
@@ -79,6 +89,7 @@ Sprint 2 1번 작업(웹 푸시 파이프라인, #39)을 Step(9-a~d)으로 쪼�
 | 이메일 Step b-2 | 이메일 발송 어댑터 (#65): `buildEmailPayload`(N건 개별 나열·HTML 이스케이프) + `emailClient`(Resend SDK, 실패 정규화) + `emailRecipientsRepository`(`email_enabled` → `getUserById` 주소 확보, 미저장) + `emailAdapter`(수신자별 격리) + cron 배선 → 응답 `notifications.email`. `resend 6.24.0`. 유닛 213. **Step b 완결**                                      | ADR 011; PR #77 (E2E·학습 문서 c)                                                                   |
 | 이메일 Step c   | 수신자 조회 실 DB e2e + 학습 문서 (#65): `getEmailRecipients` 2단 조회(실 PostgREST + 실 Auth admin API) e2e 2종 + `setEmailPreferenceRow` 헬퍼 + GHA 자동 편입(무변경). 실발송은 자동화 경계 밖. e2e 10/10. **#65 완결·이슈 닫음**                                                                                                                              | ADR 010/011; PR #79; `learning/step65-resend`                                                       |
 | 파서 row 격리   | 목록 파서 row 단위 격리 (#72): `parseListJson` 출력 계약 `{ items, isolated }`로 변경 + 항목 단위 실패 전부 격리(shape 가드 포함) + 소비자 3곳 정합(`announcementService.isolatedListRows`·canary·cron 응답). 전 항목 격리는 기존 `LIST_EMPTY`가 500으로 차단(불변식 무변경). 유닛 225                                                                           | ADR 012; PR #81                                                                                     |
+| 목록 Step a     | 공고 목록 조회 리포지토리 (#83): `AnnouncementSummary`(`raw_content`·`address`·`attachment*` 제외) + `rowToSummary` 순수 매퍼 + `listAnnouncements` (`post_date DESC, board_id DESC` 전순서, `count: 'exact'`로 total 반환, 범위 초과 page는 `PGRST103`을 빈 페이지로 흡수 + head count로 total 확보, 잘못된 page/pageSize는 `RangeError`). 유닛 243             | PR #84 (페이지 셸 b·필터 c)                                                                         |
 | 운영·회고       | Sprint 1 운영 검증 (GHA dispatch 2회 success, `last_board_id` 6561 갱신) + Sprint 1 회고                                                                                                                                                                                                                                                                         | `retrospectives/sprint-1`                                                                           |
 
 > ADR 전체: `docs/adr/` — 001 기술스택, 002/003 데이터소스·매핑, 004 스케줄러, 005 부트스트랩, 006 크롤 출력 검증, 007 크롤 범위, 008 구독 저장 모델(구독 의사/배달 채널 분리), 009 소셜 로그인, 010 E2E 테스트 전략(소유 표면 자동화 + 실 OAuth·FCM 경계), 011 멀티채널 알림 모델(역량 기반 opt-in + 채널 플러그형 발송), 012 목록 파서 row 격리(격리 vs 중단 경계 — 국지적 오입력은 격리, 전면 붕괴는 `LIST_EMPTY`로 중단).
@@ -101,7 +112,7 @@ Sprint 2 1번 작업(웹 푸시 파이프라인, #39)을 Step(9-a~d)으로 쪼�
 
 - ~~이메일 알림 (#65, ADR 011)~~: **완결·이슈 닫음**(2026-08-28, a→b-1→b-2→c 전부 머지 — 위 "✅ 완료" 섹션). 실발송 수동 스모크만 도메인 검증 시점으로 연기(크롤 트리거 → `notifications.email` 확인, 절차는 `learning/step65-resend` §4의 제약 참고)
 - ~~크롤 파서 row 격리 (#72, ADR 012)~~: **완결·이슈 닫음**(2026-08-31, PR #81 — 위 "✅ 완료" 섹션)
-- 공고 목록 페이지 (Next.js SSG + ISR) — **지금이 착수 시점**. 알림 파이프라인(크롤→저장→웹푸시·이메일)은 전부 완결됐고, 남은 건 "웹에서 확인" 경로다. `announcements` 테이블은 Step 7부터 채워져 있어 조회 레이어부터 시작하면 된다. 규모상 Step 분할 대상일 가능성이 높음(조회 리포/페이지 셸/필터·페이지네이션)
+- 공고 목록 페이지 (#83, Next.js SSG + ISR) — **진행 중**. 조회 리포/페이지 셸/필터·페이지네이션 3단으로 분할했고, **Step a(조회 리포지토리) 완료·머지**(PR #84). 다음은 **Step b — 목록 페이지 셸**(라우트 + 공고 카드 컴포넌트 + ISR revalidate), 이어서 Step c(필터·페이지네이션 UI — 클라이언트 직결 쿼리 대신 URL searchParams + 서버 컴포넌트). 조회 경로·인계 계약은 위 "🔄 진행 중" 섹션 참조
 - 공고 상세 페이지 (동적 라우트 `[boardId]`) — 이게 생기면 알림 URL 빌더(`buildNotificationPayload`·`buildEmailPayload`)를 soco `view.do`에서 내부 상세로 교체할 수 있다(9-c 주석에 명시된 교체 지점)
 - 위 화면 확정 후 UI 디자인 일괄 작업 (v0/Lovable 등)
 
