@@ -5,7 +5,17 @@
 
 ---
 
-## 0. 최신 상태 (2026-08-28 기준)
+## 0. 최신 상태 (2026-08-31 기준)
+
+### ✅ 완료 — 크롤 파서 row 격리 (#72, 2026-08-31 이슈 닫음)
+
+#68·#42로 두 번 밟은 크롤 동결의 **구조 원인**을 제거했다(PR #81). `parseListJson`이 항목 하나의 매핑 실패에서 목록 전체를 throw로 중단하던 것을 **row 단위 격리**로 전환 — 출력 계약을 `AnnouncementListItem[]` → `{ items, isolated }`로 바꾸고, row 매핑을 try/catch로 감싸 항목 단위 실패는 전부 격리한다(사유·boardId 동반, 명시 shape 가드로 `boardId`·`nttSj`·`regDate` 이상도 읽을 수 있는 사유로 표면화). 이로써 상세 크롤 경로에만 있던 row 격리(ADR 007)와 목록 경로가 대칭이 됐다.
+
+**격리 vs 중단 경계는 ADR 012**가 단일 출처 — ADR 006(카나리로 구조 변경 감지)과의 긴장을 세 줄 규칙으로 해소했다: ① JSON 자체 invalid → 기존대로 throw(500), ② 항목 단위 실패 → 해당 row만 격리 + 응답·로그 표면화, ③ **전 항목 격리(유효 0건) → 기존 `LIST_EMPTY` 불변식이 500으로 차단**. ③ 덕분에 불변식 코드는 무변경으로 경계가 성립한다. `latestBoardId`는 격리 row의 boardId도 포함해 전진(최신 항목이 격리되면 매 회차 재관측되는 영구 노이즈 차단)하되, 유효 0건이면 전진시키지 않아 카나리가 잡게 둔다.
+
+**배제한 접근 2건도 ADR 012에 기록**(회귀 방지): 격리율 임계값 경보는 ADR 006이 드리프트 추적을 보류한 것과 같은 이유(운영 이력 없는 임계값은 검증 불가능한 추측)로 배제. **격리 row를 view.do로 살리는 접근**도 배제 — 저장 데이터는 전부 `parseDetailPage` 출력이라 기술적으로 가능하지만(ADR 003 옵션 B), 상세 파서의 분류도 제목 휴리스틱이므로 사이트가 진짜 새 카테고리를 도입하면 그것을 추측해 저장하게 된다. 알림 매칭·필터가 그 분류에 의존하므로 오분류 저장이 알림 1건 유실보다 비싸다. #69·#71의 제목 폴백은 유지(복원 가능한 미기재는 데이터로 살리고, 복원 불가능한 이상만 격리).
+
+소비자 정합: `announcementService`(결과에 `isolatedListRows`, 전 페이지 누적 / 후보·페이지네이션 경계는 유효 items 기준), `canary`(불변식을 유효 items에 적용), cron route(응답 `isolatedListRows` + `console.warn`). 유닛 213 → **225**. 학습 문서는 작성하지 않았다 — 새 기술 도입이 아니라 가용성 vs 데이터 정합성 트레이드오프 판단이고 ADR 012가 온전히 담는다.
 
 ### ✅ 완료 — Sprint 2 이메일 알림 채널 (#65, 2026-08-28 이슈 닫음)
 
@@ -35,7 +45,7 @@ Sprint 2 1번 작업(웹 푸시 파이프라인, #39)을 Step(9-a~d)으로 쪼�
 
 ### ✅ 해소됨 — 크롤 동결 2차: optn5 미기재 (Issue #68, 2026-08-04)
 
-2026-08-03 08:31 UTC부터 매시간 500으로 동결됐던 크롤을 PR #69로 해소(프로덕션 200 + 6624 저장 + `push: {sent: 1}` dispatch 검증). 원인: 신규 공고 6624(공공임대)가 `optn5`(모집유형) 미기재로 게시 → `toRecruitmentType` throw가 목록 전체 파싱을 중단. 수정: null/빈 값이면 `parseDetailPage`와 동일한 제목 휴리스틱('추가모집' → additional, 아니면 initial)으로 폴백, 미지의 코드는 기존대로 throw 유지(카나리 감지 경계 보존). 후속 방어: 쌍둥이 케이스인 `optn2`(공공/민간) 미기재도 동일한 제목 폴백('공공임대' → public, 아니면 private)으로 예방 완료(#71, PR #73 머지). 잔여 구조 이슈(한 항목의 매핑 실패가 목록 전체를 죽임 — ADR 007 row 격리와 상충)는 **#72로 분리** — 파서 출력 계약 변경(유효+격리 분리 반환) + ADR 작성, 이메일 채널(#65) 완료 후 착수.
+2026-08-03 08:31 UTC부터 매시간 500으로 동결됐던 크롤을 PR #69로 해소(프로덕션 200 + 6624 저장 + `push: {sent: 1}` dispatch 검증). 원인: 신규 공고 6624(공공임대)가 `optn5`(모집유형) 미기재로 게시 → `toRecruitmentType` throw가 목록 전체 파싱을 중단. 수정: null/빈 값이면 `parseDetailPage`와 동일한 제목 휴리스틱('추가모집' → additional, 아니면 initial)으로 폴백, 미지의 코드는 기존대로 throw 유지(카나리 감지 경계 보존). 후속 방어: 쌍둥이 케이스인 `optn2`(공공/민간) 미기재도 동일한 제목 폴백('공공임대' → public, 아니면 private)으로 예방 완료(#71, PR #73 머지). 잔여 구조 이슈(한 항목의 매핑 실패가 목록 전체를 죽임 — ADR 007 row 격리와 상충)는 **#72로 분리**했고 **2026-08-31 완결**(PR #81, ADR 012 — 위 "✅ 완료 — 크롤 파서 row 격리" 섹션).
 
 ### ✅ 해소됨 — 크롤 파이프라인 동결 (Issue #42, 2026-06-18)
 
@@ -68,9 +78,10 @@ Sprint 2 1번 작업(웹 푸시 파이프라인, #39)을 Step(9-a~d)으로 쪼�
 | 이메일 Step b-1 | 채널 어댑터 리팩터 (#65): `ChannelAdapter` 계약 + 9-c 발송 로직을 `webPushAdapter`로 이동(동작 무변경) + `notificationService`를 `lib/notifications/`로 이동·어댑터 격리 순회로 일반화 + cron 응답 `push`→`notifications.web_push`. 유닛 189                                                                                                                     | ADR 011 축2; PR #75 (이메일 어댑터 b-2)                                                             |
 | 이메일 Step b-2 | 이메일 발송 어댑터 (#65): `buildEmailPayload`(N건 개별 나열·HTML 이스케이프) + `emailClient`(Resend SDK, 실패 정규화) + `emailRecipientsRepository`(`email_enabled` → `getUserById` 주소 확보, 미저장) + `emailAdapter`(수신자별 격리) + cron 배선 → 응답 `notifications.email`. `resend 6.24.0`. 유닛 213. **Step b 완결**                                      | ADR 011; PR #77 (E2E·학습 문서 c)                                                                   |
 | 이메일 Step c   | 수신자 조회 실 DB e2e + 학습 문서 (#65): `getEmailRecipients` 2단 조회(실 PostgREST + 실 Auth admin API) e2e 2종 + `setEmailPreferenceRow` 헬퍼 + GHA 자동 편입(무변경). 실발송은 자동화 경계 밖. e2e 10/10. **#65 완결·이슈 닫음**                                                                                                                              | ADR 010/011; PR #79; `learning/step65-resend`                                                       |
+| 파서 row 격리   | 목록 파서 row 단위 격리 (#72): `parseListJson` 출력 계약 `{ items, isolated }`로 변경 + 항목 단위 실패 전부 격리(shape 가드 포함) + 소비자 3곳 정합(`announcementService.isolatedListRows`·canary·cron 응답). 전 항목 격리는 기존 `LIST_EMPTY`가 500으로 차단(불변식 무변경). 유닛 225                                                                           | ADR 012; PR #81                                                                                     |
 | 운영·회고       | Sprint 1 운영 검증 (GHA dispatch 2회 success, `last_board_id` 6561 갱신) + Sprint 1 회고                                                                                                                                                                                                                                                                         | `retrospectives/sprint-1`                                                                           |
 
-> ADR 전체: `docs/adr/` — 001 기술스택, 002/003 데이터소스·매핑, 004 스케줄러, 005 부트스트랩, 006 크롤 출력 검증, 007 크롤 범위, 008 구독 저장 모델(구독 의사/배달 채널 분리), 009 소셜 로그인, 010 E2E 테스트 전략(소유 표면 자동화 + 실 OAuth·FCM 경계), 011 멀티채널 알림 모델(역량 기반 opt-in + 채널 플러그형 발송).
+> ADR 전체: `docs/adr/` — 001 기술스택, 002/003 데이터소스·매핑, 004 스케줄러, 005 부트스트랩, 006 크롤 출력 검증, 007 크롤 범위, 008 구독 저장 모델(구독 의사/배달 채널 분리), 009 소셜 로그인, 010 E2E 테스트 전략(소유 표면 자동화 + 실 OAuth·FCM 경계), 011 멀티채널 알림 모델(역량 기반 opt-in + 채널 플러그형 발송), 012 목록 파서 row 격리(격리 vs 중단 경계 — 국지적 오입력은 격리, 전면 붕괴는 `LIST_EMPTY`로 중단).
 
 ### Sprint 1 완료 — 다음 Sprint 2 시작 준비
 
@@ -89,9 +100,9 @@ Sprint 2 1번 작업(웹 푸시 파이프라인, #39)을 Step(9-a~d)으로 쪼�
 이후 Sprint 2 나머지:
 
 - ~~이메일 알림 (#65, ADR 011)~~: **완결·이슈 닫음**(2026-08-28, a→b-1→b-2→c 전부 머지 — 위 "✅ 완료" 섹션). 실발송 수동 스모크만 도메인 검증 시점으로 연기(크롤 트리거 → `notifications.email` 확인, 절차는 `learning/step65-resend` §4의 제약 참고)
-- 크롤 파서 row 격리 (#72): 한 항목의 매핑 실패가 목록 전체를 죽이는 구조 이슈(ADR 007 row 격리와 상충) — 파서 출력 계약 변경(유효+격리 분리 반환) + ADR 작성. "#65 완료 후 착수"로 분리해 둔 것, **지금이 착수 시점**
-- 공고 목록 페이지 (Next.js SSG + ISR)
-- 공고 상세 페이지 (동적 라우트 `[boardId]`)
+- ~~크롤 파서 row 격리 (#72, ADR 012)~~: **완결·이슈 닫음**(2026-08-31, PR #81 — 위 "✅ 완료" 섹션)
+- 공고 목록 페이지 (Next.js SSG + ISR) — **지금이 착수 시점**. 알림 파이프라인(크롤→저장→웹푸시·이메일)은 전부 완결됐고, 남은 건 "웹에서 확인" 경로다. `announcements` 테이블은 Step 7부터 채워져 있어 조회 레이어부터 시작하면 된다. 규모상 Step 분할 대상일 가능성이 높음(조회 리포/페이지 셸/필터·페이지네이션)
+- 공고 상세 페이지 (동적 라우트 `[boardId]`) — 이게 생기면 알림 URL 빌더(`buildNotificationPayload`·`buildEmailPayload`)를 soco `view.do`에서 내부 상세로 교체할 수 있다(9-c 주석에 명시된 교체 지점)
 - 위 화면 확정 후 UI 디자인 일괄 작업 (v0/Lovable 등)
 
 마일스톤 = MVP 완성: 새 공고 → 크롤링 감지 → 구독자 알림 → 웹에서 확인.
