@@ -66,21 +66,35 @@ const codesOf = (violations: { code: string }[]) =>
 
 describe('checkListInvariants', () => {
   it('실 응답 픽스처는 위반 0건 (정상 계약)', () => {
-    expect(checkListInvariants(parseListJson(fixtureJson))).toEqual([]);
+    expect(checkListInvariants(parseListJson(fixtureJson).items)).toEqual([]);
   });
 
-  // 사이트가 응답 형태를 바꾸면 parseListJson은 throw 없이 빈 배열을 반환한다
+  // 사이트가 응답 형태를 바꾸면 parseListJson은 throw 없이 빈 items를 반환한다
   // (resultList ?? []). 불변식이 그 침묵을 잡아내는 것이 이 테스트의 핵심.
   describe('사이트 변경 시뮬레이션 — 파서는 조용히 통과, 불변식이 잡는다', () => {
-    it('S1: resultList가 빈 응답 → 파서는 [] 반환, LIST_EMPTY', () => {
-      const items = parseListJson(JSON.stringify({ resultList: [] }));
+    it('S1: resultList가 빈 응답 → 파서는 빈 items, LIST_EMPTY', () => {
+      const { items } = parseListJson(JSON.stringify({ resultList: [] }));
       expect(items).toEqual([]); // 파서는 throw 없이 통과
       expect(codesOf(checkListInvariants(items))).toEqual(['LIST_EMPTY']);
     });
 
-    it('S1: resultList 키 누락 → 파서는 [] 반환, LIST_EMPTY', () => {
-      const items = parseListJson(JSON.stringify({ pagingInfo: {} }));
+    it('S1: resultList 키 누락 → 파서는 빈 items, LIST_EMPTY', () => {
+      const { items } = parseListJson(JSON.stringify({ pagingInfo: {} }));
       expect(items).toEqual([]);
+      expect(codesOf(checkListInvariants(items))).toEqual(['LIST_EMPTY']);
+    });
+
+    // ADR 012 경계: 전 항목이 row 격리되면 유효 items가 비고, 같은 LIST_EMPTY가
+    // 잡는다 — 국지적 오입력은 격리, 전면 붕괴는 중단.
+    it('전 항목 row 격리 → 유효 items가 비어 LIST_EMPTY', () => {
+      const allBad = JSON.stringify({
+        resultList: [
+          { boardId: 1, nttSj: 'A', optn2: '9', optn5: '1', regDate: 0 },
+          { boardId: 2, nttSj: 'B', optn2: '9', optn5: '1', regDate: 0 },
+        ],
+      });
+      const { items, isolated } = parseListJson(allBad);
+      expect(isolated).toHaveLength(2);
       expect(codesOf(checkListInvariants(items))).toEqual(['LIST_EMPTY']);
     });
   });

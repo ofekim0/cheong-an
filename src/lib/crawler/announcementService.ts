@@ -12,6 +12,10 @@
  * - 저장 전 파서 불변식(checkDetailInvariants)을 통과하지 못한 detail은
  *   invalidBoardIds로 격리한다 — 단일 불량 row가 배치 전체를 실패시켜 파이프라인을
  *   동결시키는 것을 막는다(ADR 006/007).
+ * - 목록 파싱 단계에서 row 단위로 격리된 항목(parseListJson.isolated)은
+ *   isolatedListRows로 표면화한다. latestBoardId는 격리 row의 boardId도 포함해
+ *   전진한다 — 미포함이면 격리 항목이 매 회차 재관측되므로, 상세 경로
+ *   invalidBoardIds와 같은 수준에서 알림 유실을 수용한다(ADR 012).
  * - 각 호출에 rateLimit과 retry를 일관되게 적용. 호출 순서는 boardId 오름차순.
  * - 부트스트랩(lastBoardId=0)에서는 catch-up 루프를 건너뛰고 latestBoardId만 반환
  *   (ADR 005).
@@ -29,13 +33,19 @@
  * - ADR 003 옵션 B (저장 전 view.do 보강 → 모든 신규는 detail로 통일).
  * - ADR 005 (lastBoardId=0이면 부트스트랩으로 catch-up 생략).
  * - ADR 007 (전역 boardId gap-fill 폐기, 목록에 존재하는 boardId만 크롤).
+ * - ADR 012 (목록 파서 row 격리 — 격리 vs 중단 경계).
  */
 
 import { fetchHtml, type FetchHtmlOptions } from './fetchHtml';
 import { fetchJsonText, type FetchJsonOptions } from './fetchJsonText';
 import { withRetry, type RetryOptions } from './retry';
 import { createRateLimiter, type RateLimiter } from './rateLimit';
-import { parseListJson, parseTotalPages } from './parseListJson';
+import {
+  parseListJson,
+  parseTotalPages,
+  type IsolatedListRow,
+  type ParseListJsonResult,
+} from './parseListJson';
 import { parseDetailPage } from './parseDetailPage';
 import { isViewErrorPage } from './isViewErrorPage';
 import { checkDetailInvariants } from './parserInvariants';
@@ -98,8 +108,9 @@ export interface CrawlAnnouncementsResult {
    */
   newDetails: AnnouncementDetail[];
   /**
-   * 응답에서 관측한 가장 큰 boardId.
-   * resultList가 비어 있으면 입력 lastBoardId를 그대로 반환.
+   * 응답에서 관측한 가장 큰 boardId (격리 row 포함 — ADR 012).
+   * 유효 항목이 0건이면(빈 resultList 또는 전 항목 격리) 입력 lastBoardId를
+   * 그대로 반환해 전진시키지 않는다.
    */
   latestBoardId: number;
   /**
@@ -114,6 +125,12 @@ export interface CrawlAnnouncementsResult {
    * boardId 오름차순 정렬.
    */
   invalidBoardIds: number[];
+  /**
+   * 목록 파싱 단계에서 row 단위 실패로 격리된 항목 (ADR 012).
+   * 국지적 오입력 신호 — 운영 관찰용. latestBoardId는 격리 row의 boardId도
+   * 포함해 전진하므로 격리 항목은 다음 회차에 재관측되지 않는다(알림 유실 수용).
+   */
+  isolatedListRows: IsolatedListRow[];
 }
 
 export async function crawlNewAnnouncements(
@@ -155,21 +172,25 @@ export async function crawlNewAnnouncements(
 
   // 1) 목록 1페이지 호출 → latestBoardId 산출.
   const firstText = await fetchListPage(1);
-  const firstItems = parseListJson(firstText);
+  const firstPage = parseListJson(firstText);
 
-  if (firstItems.length === 0) {
+  if (firstPage.items.length === 0) {
+    // 유효 항목 0건 = 빈 resultList(키 소실) 또는 전 항목 격리 — 둘 다 전면 붕괴
+    // 신호다. latestBoardId를 전진시키지 않아 다음 회차에 재관측되게 두고,
+    // 카나리의 LIST_EMPTY가 500으로 잡게 한다 (ADR 006/012 경계).
     return {
       newDetails: [],
       latestBoardId: lastBoardId,
       skippedBoardIds: [],
       invalidBoardIds: [],
+      isolatedListRows: firstPage.isolated,
     };
   }
 
-  const latestBoardId = firstItems.reduce(
-    (max, item) => (item.boardId > max ? item.boardId : max),
-    -Infinity,
-  );
+  // 격리 row의 boardId도 latest 산출에 포함한다 — 최신 항목이 격리되면 그
+  // boardId를 넘기지 못해 매 회차 재관측되므로(영구 노이즈), 알림 유실을
+  // 수용하고 전진시킨다 (ADR 012).
+  const latestBoardId = maxBoardId(firstPage);
 
   // 2) 부트스트랩: lastBoardId=0(마이그레이션 시드)은 "초기 가동" 신호.
   //    과거 게시물은 알림 대상이 아니므로 catch-up 루프를 생략하고
@@ -180,19 +201,21 @@ export async function crawlNewAnnouncements(
       latestBoardId,
       skippedBoardIds: [],
       invalidBoardIds: [],
+      isolatedListRows: firstPage.isolated,
     };
   }
 
-  // 3) 신규 후보 = 목록에 존재하고 boardId > lastBoardId인 항목 (ADR 007).
+  // 3) 신규 후보 = 목록에 존재하고 boardId > lastBoardId인 **유효** 항목 (ADR 007/012).
   //    숫자 gap은 채우지 않는다 — 전역 시퀀스라 타 게시판 공고가 섞이기 때문.
   //    1페이지 최소 boardId(=가장 오래된 항목)가 아직 lastBoardId보다 크면 신규가 페이지를 넘쳤을 수
   //    있으므로, 다음 페이지가 있는 한 추가로 조회해 누락을 보전한다.
-  const newBoardIds = await collectNewBoardIds({
-    lastBoardId,
-    firstText,
-    firstItems,
-    fetchListPage,
-  });
+  const { boardIds: newBoardIds, isolated: isolatedListRows } =
+    await collectNewBoardIds({
+      lastBoardId,
+      firstText,
+      firstPage,
+      fetchListPage,
+    });
 
   // 4) 각 신규 boardId를 view.do로 호출.
   //    - 633B 에러 페이지 → skippedBoardIds.
@@ -226,27 +249,44 @@ export async function crawlNewAnnouncements(
     latestBoardId,
     skippedBoardIds,
     invalidBoardIds,
+    isolatedListRows,
   };
+}
+
+/** 유효 항목과 격리 row(boardId 읽을 수 있는 것)를 합친 최대 boardId (ADR 012). */
+function maxBoardId(page: ParseListJsonResult): number {
+  const ids = [
+    ...page.items.map((item) => item.boardId),
+    ...page.isolated
+      .map((row) => row.boardId)
+      .filter((boardId): boardId is number => boardId !== null),
+  ];
+  return ids.reduce((max, id) => (id > max ? id : max), -Infinity);
 }
 
 /**
  * 목록을 페이지네이션하며 boardId > lastBoardId인 신규 항목의 boardId를
- * 오름차순·중복 제거해 모은다.
+ * 오름차순·중복 제거해 모은다. 조회한 모든 페이지의 격리 row도 함께 모아
+ * 반환한다(운영 표면화용, ADR 012).
  *
  * 1페이지는 이미 받아둔 것을 재사용한다. 다음 페이지로 넘어가는 조건은:
  * - 현재 페이지 최소 boardId가 아직 lastBoardId보다 큼(경계를 못 넘음), AND
  * - pagingInfo.totPage 기준 더 볼 페이지가 남음.
  * totPage가 없으면(키 소실·단일 페이지) 추가 조회하지 않는다.
+ *
+ * 경계 판단(minBoardId)과 후보 수집은 모두 **유효 항목** 기준이다. 격리 row는
+ * 목록 데이터가 이미 신뢰할 수 없다는 뜻이라 크롤 후보로 삼지 않는다.
  */
 async function collectNewBoardIds(params: {
   lastBoardId: number;
   firstText: string;
-  firstItems: AnnouncementListItem[];
+  firstPage: ParseListJsonResult;
   fetchListPage: (pageIndex: number) => Promise<string>;
-}): Promise<number[]> {
-  const { lastBoardId, firstText, firstItems, fetchListPage } = params;
+}): Promise<{ boardIds: number[]; isolated: IsolatedListRow[] }> {
+  const { lastBoardId, firstText, firstPage, fetchListPage } = params;
 
   const collected = new Set<number>();
+  const isolated: IsolatedListRow[] = [];
   const addNew = (items: AnnouncementListItem[]) => {
     for (const item of items) {
       if (item.boardId > lastBoardId) collected.add(item.boardId);
@@ -258,8 +298,9 @@ async function collectNewBoardIds(params: {
       Infinity,
     );
 
-  addNew(firstItems);
-  let pageItems = firstItems;
+  addNew(firstPage.items);
+  isolated.push(...firstPage.isolated);
+  let pageItems = firstPage.items;
   let pageText = firstText;
   let page = 1;
 
@@ -275,10 +316,12 @@ async function collectNewBoardIds(params: {
     }
     page += 1;
     pageText = await fetchListPage(page);
-    pageItems = parseListJson(pageText);
+    const parsed = parseListJson(pageText);
+    isolated.push(...parsed.isolated);
+    pageItems = parsed.items;
     if (pageItems.length === 0) break;
     addNew(pageItems);
   }
 
-  return [...collected].sort((a, b) => a - b);
+  return { boardIds: [...collected].sort((a, b) => a - b), isolated };
 }

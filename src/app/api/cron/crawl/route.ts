@@ -9,11 +9,13 @@
  *   2. 라이브 카나리 검증 (파서 불변식, ADR 006) — 위반 시 즉시 500, 저장 안 함.
  *   3. crawl_state.last_board_id 조회.
  *   4. 목록 기반 크롤 + view.do 보강으로 신규 detail 확보 (ADR 002/003/007).
+ *      목록 파싱 단계의 row 격리는 isolatedListRows로 표면화 (ADR 012).
  *   5. announcements UPSERT (불변식 위반 row는 이미 invalidBoardIds로 격리됨).
  *   6. crawl_state.last_board_id / last_crawled_at 갱신.
  *   7. 신규 공고가 있으면 채널 어댑터별로 구독 계정에 발송 (9-c → ADR 011
  *      채널 플러그형. 웹 푸시 + 이메일).
- *   8. JSON 응답: { newCount, skippedBoardIds, invalidBoardIds, latestBoardId,
+ *   8. JSON 응답: { newCount, skippedBoardIds, invalidBoardIds,
+ *      isolatedListRows, latestBoardId,
  *      notifications: { web_push: {...}, email: {...} } }.
  *
  * 환경변수:
@@ -84,11 +86,22 @@ export async function GET(request: Request): Promise<NextResponse> {
     const client = getSupabaseAdminClient();
     const lastBoardId = await getLastBoardId(client);
 
-    const { newDetails, latestBoardId, skippedBoardIds, invalidBoardIds } =
-      await crawlNewAnnouncements({ lastBoardId });
+    const {
+      newDetails,
+      latestBoardId,
+      skippedBoardIds,
+      invalidBoardIds,
+      isolatedListRows,
+    } = await crawlNewAnnouncements({ lastBoardId });
 
     if (invalidBoardIds.length > 0) {
       console.warn('[cron/crawl] 불변식 위반으로 저장 제외:', invalidBoardIds);
+    }
+
+    // 목록 파서가 row 단위로 격리한 항목(ADR 012). 국지적 오입력이므로 크롤을
+    // 멈추지 않되, 조용히 넘기지 않는다 — 응답과 로그로 관찰 창구를 남긴다.
+    if (isolatedListRows.length > 0) {
+      console.warn('[cron/crawl] 목록 row 격리:', isolatedListRows);
     }
 
     await upsertAnnouncements(client, newDetails);
@@ -109,6 +122,7 @@ export async function GET(request: Request): Promise<NextResponse> {
       newCount: newDetails.length,
       skippedBoardIds,
       invalidBoardIds,
+      isolatedListRows,
       latestBoardId,
       notifications,
     });
