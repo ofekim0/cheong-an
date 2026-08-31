@@ -44,22 +44,41 @@ const FAST = {
   },
 };
 
-function buildListJsonText(boardIds: number[], totPage?: number): string {
+/** 유효한 목록 row 1건. overrides로 필드를 어긋내 격리 시나리오를 만든다. */
+function buildRow(
+  boardId: number,
+  overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    boardId,
+    nttSj: `[민간임대] 테스트 공고 ${boardId}`,
+    content: `<p>본문 ${boardId}</p>`,
+    optn1: '2026-05-01',
+    optn2: '2',
+    optn3: '테스트 사업주체',
+    optn4: '2026-05-31',
+    optn5: '1',
+    atchFileId: `att-${boardId}`,
+    regDate: 0,
+    ...overrides,
+  };
+}
+
+function buildListJsonFromRows(
+  rows: Record<string, unknown>[],
+  totPage?: number,
+): string {
   return JSON.stringify({
-    pagingInfo: { totRow: boardIds.length, ...(totPage ? { totPage } : {}) },
-    resultList: boardIds.map((boardId) => ({
-      boardId,
-      nttSj: `[민간임대] 테스트 공고 ${boardId}`,
-      content: `<p>본문 ${boardId}</p>`,
-      optn1: '2026-05-01',
-      optn2: '2',
-      optn3: '테스트 사업주체',
-      optn4: '2026-05-31',
-      optn5: '1',
-      atchFileId: `att-${boardId}`,
-      regDate: 0,
-    })),
+    pagingInfo: { totRow: rows.length, ...(totPage ? { totPage } : {}) },
+    resultList: rows,
   });
+}
+
+function buildListJsonText(boardIds: number[], totPage?: number): string {
+  return buildListJsonFromRows(
+    boardIds.map((boardId) => buildRow(boardId)),
+    totPage,
+  );
 }
 
 /**
@@ -111,6 +130,7 @@ describe('crawlNewAnnouncements', () => {
     expect(result.newDetails).toEqual([]);
     expect(result.latestBoardId).toBe(100);
     expect(result.skippedBoardIds).toEqual([]);
+    expect(result.isolatedListRows).toEqual([]);
   });
 
   // ADR 005: 시드값 0은 "초기 가동" 신호 → view.do 루프 생략, latestBoardId만 반환.
@@ -234,6 +254,113 @@ describe('crawlNewAnnouncements', () => {
     expect(result.invalidBoardIds).toEqual([101]);
     expect(result.skippedBoardIds).toEqual([]);
     expect(result.latestBoardId).toBe(101);
+  });
+
+  // ADR 012: 목록 파서가 row 단위로 격리한 항목은 크롤 후보에서 빠지되 결과로
+  //   표면화된다. 한 항목의 오입력이 회차 전체를 죽이지 않는다(#68 재발 차단).
+  it('불량 row는 격리하고 유효 row만 크롤한다 — #68 시나리오', async () => {
+    // 신규 후보 = [101, 102, 103] 중 102는 미지의 optn5 코드로 격리.
+    const observedBoardIds: number[] = [];
+    server.use(
+      http.post(LIST_URL, () =>
+        jsonResponse(
+          buildListJsonFromRows([
+            buildRow(103),
+            buildRow(102, { optn5: '9' }),
+            buildRow(101),
+          ]),
+        ),
+      ),
+      http.get(VIEW_BASE, ({ request }) => {
+        observedBoardIds.push(
+          Number(new URL(request.url).searchParams.get('boardId')),
+        );
+        return htmlResponse(detailHtmlFixture);
+      }),
+    );
+
+    const result = await crawlNewAnnouncements({ ...FAST, lastBoardId: 100 });
+
+    expect(observedBoardIds).toEqual([101, 103]);
+    expect(result.newDetails.map((d) => d.boardId)).toEqual([101, 103]);
+    expect(result.isolatedListRows).toEqual([
+      { boardId: 102, reason: expect.stringContaining('optn5') },
+    ]);
+    expect(result.latestBoardId).toBe(103);
+    expect(result.invalidBoardIds).toEqual([]);
+  });
+
+  // ADR 012: 최신 항목이 격리되면 그 boardId도 latest에 포함해 전진시킨다 —
+  //   포함하지 않으면 매 회차 같은 row를 재관측해 영구 노이즈가 된다.
+  it('최신 항목이 격리되면 latestBoardId는 그 boardId까지 전진한다', async () => {
+    server.use(
+      http.post(LIST_URL, () =>
+        jsonResponse(
+          buildListJsonFromRows([buildRow(103, { optn2: '9' }), buildRow(101)]),
+        ),
+      ),
+      viewHandler(),
+    );
+
+    const result = await crawlNewAnnouncements({ ...FAST, lastBoardId: 100 });
+
+    expect(result.newDetails.map((d) => d.boardId)).toEqual([101]);
+    expect(result.isolatedListRows).toHaveLength(1);
+    expect(result.latestBoardId).toBe(103);
+  });
+
+  // ADR 012 경계: 전 항목 격리는 전면 붕괴 신호다 — latestBoardId를 전진시키지
+  //   않아 재관측되게 두고, 카나리의 LIST_EMPTY가 500으로 잡는다.
+  it('전 항목이 격리되면 latestBoardId를 전진시키지 않는다', async () => {
+    server.use(
+      http.post(LIST_URL, () =>
+        jsonResponse(
+          buildListJsonFromRows([
+            buildRow(103, { optn2: '9' }),
+            buildRow(101, { optn2: '9' }),
+          ]),
+        ),
+      ),
+      viewHandler(),
+    );
+
+    const result = await crawlNewAnnouncements({ ...FAST, lastBoardId: 100 });
+
+    expect(result.newDetails).toEqual([]);
+    expect(result.latestBoardId).toBe(100);
+    expect(result.isolatedListRows).toHaveLength(2);
+  });
+
+  it('2페이지 조회 시 각 페이지의 격리 row를 모두 누적한다', async () => {
+    // page1: [105,104(격리),103] → 경계 못 넘음 → page2
+    // page2: [102,101(격리),100] → 100이 경계 → 중단
+    server.use(
+      http.post(LIST_URL, async ({ request }) => {
+        const params = new URLSearchParams(await request.text());
+        const pageIndex = params.get('pageIndex') ?? '1';
+        if (pageIndex === '1') {
+          return jsonResponse(
+            buildListJsonFromRows(
+              [buildRow(105), buildRow(104, { nttSj: '  ' }), buildRow(103)],
+              2,
+            ),
+          );
+        }
+        return jsonResponse(
+          buildListJsonFromRows(
+            [buildRow(102), buildRow(101, { regDate: 'bad' }), buildRow(100)],
+            2,
+          ),
+        );
+      }),
+      viewHandler(),
+    );
+
+    const result = await crawlNewAnnouncements({ ...FAST, lastBoardId: 100 });
+
+    expect(result.newDetails.map((d) => d.boardId)).toEqual([102, 103, 105]);
+    expect(result.isolatedListRows.map((r) => r.boardId)).toEqual([104, 101]);
+    expect(result.latestBoardId).toBe(105);
   });
 
   // ADR 007: 신규가 1페이지(목록 상한)를 넘치면 다음 페이지를 조회해 보전한다.

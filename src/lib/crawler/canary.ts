@@ -119,7 +119,10 @@ export async function runCanary(
         retryOptions,
       ),
     );
-  violations.push(...checkListInvariants(parseListJson(jsonText)));
+  // row 격리(ADR 012) 후의 유효 항목에 불변식을 적용한다. 국지적 오입력으로
+  // 격리된 row는 위반이 아니고(크롤 응답이 표면화), 전 항목이 격리되면 유효
+  // 배열이 비어 LIST_EMPTY로 잡힌다 — 격리 vs 중단 경계는 ADR 012.
+  violations.push(...checkListInvariants(parseListJson(jsonText).items));
 
   // 2) 디테일 카나리 (S2) — canaryBoardId가 설정된 경우에만.
   if (canaryBoardId === undefined) {

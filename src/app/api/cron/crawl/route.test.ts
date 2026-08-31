@@ -148,6 +148,7 @@ describe('GET /api/cron/crawl', () => {
       latestBoardId: 103,
       skippedBoardIds: [102],
       invalidBoardIds: [],
+      isolatedListRows: [],
     });
     vi.mocked(upsertAnnouncements).mockResolvedValue();
     vi.mocked(updateLastBoardId).mockResolvedValue();
@@ -163,6 +164,7 @@ describe('GET /api/cron/crawl', () => {
       newCount: 2,
       skippedBoardIds: [102],
       invalidBoardIds: [],
+      isolatedListRows: [],
       latestBoardId: 103,
       notifications: {
         web_push: { sent: 3, expired: 1, failed: 0 },
@@ -210,6 +212,7 @@ describe('GET /api/cron/crawl', () => {
       latestBoardId: 101,
       skippedBoardIds: [],
       invalidBoardIds: [],
+      isolatedListRows: [],
     });
     vi.mocked(upsertAnnouncements).mockResolvedValue();
     vi.mocked(updateLastBoardId).mockResolvedValue();
@@ -234,6 +237,47 @@ describe('GET /api/cron/crawl', () => {
     expect(updateLastBoardId).toHaveBeenCalled();
   });
 
+  // ADR 012: 목록 row 격리는 크롤을 멈추지 않되 조용히 넘기지도 않는다 —
+  //   응답과 로그가 관찰 창구다.
+  it('목록 row 격리는 200 유지 + isolatedListRows·로그로 표면화', async () => {
+    const isolated = [
+      { boardId: 6624, reason: 'resultList[1].optn5: unknown code "9"' },
+      {
+        boardId: null,
+        reason: 'resultList[2].boardId is not a positive integer',
+      },
+    ];
+    vi.mocked(getSupabaseAdminClient).mockReturnValue(
+      {} as unknown as ReturnType<typeof getSupabaseAdminClient>,
+    );
+    vi.mocked(getLastBoardId).mockResolvedValue(6620);
+    vi.mocked(crawlNewAnnouncements).mockResolvedValue({
+      newDetails: [buildDetail(6625)],
+      latestBoardId: 6625,
+      skippedBoardIds: [],
+      invalidBoardIds: [],
+      isolatedListRows: isolated,
+    });
+    vi.mocked(upsertAnnouncements).mockResolvedValue();
+    vi.mocked(updateLastBoardId).mockResolvedValue();
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const response = await GET(makeRequest('Bearer test-secret'));
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.isolatedListRows).toEqual(isolated);
+    // 격리에도 유효 공고는 정상 저장·발송된다.
+    expect(body.newCount).toBe(1);
+    expect(updateLastBoardId).toHaveBeenCalledWith(expect.anything(), 6625);
+    expect(warnSpy).toHaveBeenCalledWith(
+      '[cron/crawl] 목록 row 격리:',
+      isolated,
+    );
+
+    warnSpy.mockRestore();
+  });
+
   it('upsert 실패 시 500 + 메시지 노출, updateLastBoardId 호출 안 됨', async () => {
     vi.mocked(getSupabaseAdminClient).mockReturnValue(
       {} as unknown as ReturnType<typeof getSupabaseAdminClient>,
@@ -244,6 +288,7 @@ describe('GET /api/cron/crawl', () => {
       latestBoardId: 101,
       skippedBoardIds: [],
       invalidBoardIds: [],
+      isolatedListRows: [],
     });
     vi.mocked(upsertAnnouncements).mockRejectedValue(new Error('db down'));
 
