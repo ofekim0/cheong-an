@@ -12,9 +12,10 @@
  *      목록 파싱 단계의 row 격리는 isolatedListRows로 표면화 (ADR 012).
  *   5. announcements UPSERT (불변식 위반 row는 이미 invalidBoardIds로 격리됨).
  *   6. crawl_state.last_board_id / last_crawled_at 갱신.
- *   7. 신규 공고가 있으면 채널 어댑터별로 구독 계정에 발송 (9-c → ADR 011
+ *   7. 신규 공고가 있으면 공고 목록 페이지의 ISR 캐시를 무효화 (#83 Step b).
+ *   8. 신규 공고가 있으면 채널 어댑터별로 구독 계정에 발송 (9-c → ADR 011
  *      채널 플러그형. 웹 푸시 + 이메일).
- *   8. JSON 응답: { newCount, skippedBoardIds, invalidBoardIds,
+ *   9. JSON 응답: { newCount, skippedBoardIds, invalidBoardIds,
  *      isolatedListRows, latestBoardId,
  *      notifications: { web_push: {...}, email: {...} } }.
  *
@@ -38,8 +39,10 @@
  * 캐싱: cron 트리거이므로 dynamic = 'force-dynamic'으로 매 호출 실행 보장.
  */
 
+import { revalidatePath } from 'next/cache';
 import { NextResponse } from 'next/server';
 
+import { ANNOUNCEMENTS_PATH } from '@/constants/announcements';
 import { crawlNewAnnouncements } from '@/lib/crawler/announcementService';
 import { runCanary } from '@/lib/crawler/canary';
 import { emailAdapter } from '@/lib/notifications/emailAdapter';
@@ -106,6 +109,21 @@ export async function GET(request: Request): Promise<NextResponse> {
 
     await upsertAnnouncements(client, newDetails);
     await updateLastBoardId(client, latestBoardId);
+
+    // 목록 페이지(ISR)의 캐시를 즉시 버려 다음 방문자가 새 공고를 보게 한다.
+    // 페이지의 `revalidate = 3600`은 이 트리거가 실패했을 때를 위한 상한일 뿐,
+    // 정상 경로의 반영 속도는 여기가 결정한다.
+    //
+    // 저장·lastBoardId 갱신이 끝난 뒤여야 한다 — 먼저 무효화하면 아직 저장되지
+    // 않은 상태를 다시 읽어 캐시에 굳힌다. 반대로 발송 뒤로 미루면 발송이 느릴 때
+    // 웹 반영이 그만큼 늦어진다.
+    //
+    // 신규가 없으면 호출하지 않는다: 내용이 그대로인데 캐시를 버리면 다음 방문자가
+    // 전체 렌더 비용만 다시 문다. Next 내부 캐시 태그 무효화라 네트워크 실패 요소가
+    // 없어 알림 발송처럼 격리할 필요는 없다.
+    if (newDetails.length > 0) {
+      revalidatePath(ANNOUNCEMENTS_PATH);
+    }
 
     // 발송은 저장·lastBoardId 갱신이 끝난 뒤에만 시도한다. 반대로 하면 발송
     // 장애 시 다음 크롤이 같은 공고를 재감지해 중복 알림이 되므로, "알림 1회
