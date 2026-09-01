@@ -29,6 +29,13 @@ vi.mock('@/lib/supabase/crawlStateRepository', () => ({
   getLastBoardId: vi.fn(),
   updateLastBoardId: vi.fn(),
 }));
+// ISR 캐시 무효화(#83 Step b). Next 런타임 밖에서 호출하면 실제 구현이 throw하므로
+// 모킹하고, 여기서는 "언제 부르는가"만 검증한다.
+vi.mock('next/cache', () => ({
+  revalidatePath: vi.fn(),
+}));
+
+import { revalidatePath } from 'next/cache';
 
 import { crawlNewAnnouncements } from '@/lib/crawler/announcementService';
 import { runCanary } from '@/lib/crawler/canary';
@@ -200,6 +207,86 @@ describe('GET /api/cron/crawl', () => {
     expect(crawlOrder).toBeLessThan(upsertOrder);
     expect(upsertOrder).toBeLessThan(updateOrder);
     expect(updateOrder).toBeLessThan(dispatchOrder);
+  });
+
+  // #83 Step b: 저장이 끝난 뒤 목록 페이지의 ISR 캐시를 버려야 새 공고가
+  //   1시간(revalidate 상한)을 기다리지 않고 웹에 반영된다.
+  it('신규 공고가 있으면 목록 페이지 캐시를 무효화한다 (저장 후, 발송 전)', async () => {
+    vi.mocked(getSupabaseAdminClient).mockReturnValue(
+      {} as unknown as ReturnType<typeof getSupabaseAdminClient>,
+    );
+    vi.mocked(getLastBoardId).mockResolvedValue(100);
+    vi.mocked(crawlNewAnnouncements).mockResolvedValue({
+      newDetails: [buildDetail(101)],
+      latestBoardId: 101,
+      skippedBoardIds: [],
+      invalidBoardIds: [],
+      isolatedListRows: [],
+    });
+    vi.mocked(upsertAnnouncements).mockResolvedValue();
+    vi.mocked(updateLastBoardId).mockResolvedValue();
+
+    const response = await GET(makeRequest('Bearer test-secret'));
+
+    expect(response.status).toBe(200);
+    expect(revalidatePath).toHaveBeenCalledWith('/announcements');
+
+    // 저장·lastBoardId 갱신 후에 무효화해야 한다 — 먼저 버리면 아직 저장되지 않은
+    // 상태를 다시 읽어 캐시에 굳힌다.
+    const updateOrder =
+      vi.mocked(updateLastBoardId).mock.invocationCallOrder[0];
+    const revalidateOrder =
+      vi.mocked(revalidatePath).mock.invocationCallOrder[0];
+    const dispatchOrder = vi.mocked(dispatchNotifications).mock
+      .invocationCallOrder[0];
+    expect(updateOrder).toBeLessThan(revalidateOrder);
+    expect(revalidateOrder).toBeLessThan(dispatchOrder);
+  });
+
+  it('신규 공고가 없으면 캐시를 무효화하지 않는다', async () => {
+    vi.mocked(getSupabaseAdminClient).mockReturnValue(
+      {} as unknown as ReturnType<typeof getSupabaseAdminClient>,
+    );
+    vi.mocked(getLastBoardId).mockResolvedValue(100);
+    vi.mocked(crawlNewAnnouncements).mockResolvedValue({
+      newDetails: [],
+      latestBoardId: 100,
+      skippedBoardIds: [],
+      invalidBoardIds: [],
+      isolatedListRows: [],
+    });
+    vi.mocked(upsertAnnouncements).mockResolvedValue();
+    vi.mocked(updateLastBoardId).mockResolvedValue();
+
+    const response = await GET(makeRequest('Bearer test-secret'));
+
+    expect(response.status).toBe(200);
+    expect((await response.json()).newCount).toBe(0);
+    // 내용이 그대로인데 캐시를 버리면 다음 방문자가 전체 렌더 비용만 다시 문다.
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it('upsert 실패 시 캐시를 무효화하지 않는다', async () => {
+    vi.mocked(getSupabaseAdminClient).mockReturnValue(
+      {} as unknown as ReturnType<typeof getSupabaseAdminClient>,
+    );
+    vi.mocked(getLastBoardId).mockResolvedValue(100);
+    vi.mocked(crawlNewAnnouncements).mockResolvedValue({
+      newDetails: [buildDetail(101)],
+      latestBoardId: 101,
+      skippedBoardIds: [],
+      invalidBoardIds: [],
+      isolatedListRows: [],
+    });
+    vi.mocked(upsertAnnouncements).mockRejectedValue(new Error('db down'));
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const response = await GET(makeRequest('Bearer test-secret'));
+
+    expect(response.status).toBe(500);
+    expect(revalidatePath).not.toHaveBeenCalled();
+
+    errSpy.mockRestore();
   });
 
   it('채널 발송 실패 시에도 200 유지, notifications.<channel>.error로 표면화', async () => {
