@@ -35,8 +35,6 @@ import {
 import { getSupabaseServerClient } from '@/lib/supabase/serverClient';
 import type { PushSubscriptionJson } from '@/types/push';
 
-export const dynamic = 'force-dynamic';
-
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0;
 }

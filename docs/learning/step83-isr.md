@@ -4,6 +4,8 @@ App Router의 ISR(Incremental Static Regeneration)은 "빌드 때 만든 HTML을
 
 기준 버전: Next.js 16.2.1 (App Router, Turbopack). `cacheComponents`는 켜지 않은 기본 설정.
 
+> **후속**: Step c-2에서 페이지네이션을 붙이며 `cacheComponents`로 전환했다. 이 문서의 §2(세그먼트 설정)·§5(빌드가 데이터 소스를 부른다)는 그 모델에서 성립하지 않는다 — [`step83-cache-components.md`](./step83-cache-components.md)와 `docs/adr/013-cache-components-rendering-model.md` 참조. 나머지(무효화 시점 규칙, 빌드 출력 확인, 테스트 전략)는 그대로 유효하다. 이 문서는 그 시점의 판단 기록으로 남긴다.
+
 ---
 
 ## 1. 멘탈 모델 — 렌더가 언제 일어나는가

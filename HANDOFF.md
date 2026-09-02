@@ -5,21 +5,28 @@
 
 ---
 
-## 0. 최신 상태 (2026-09-01 기준)
+## 0. 최신 상태 (2026-09-02 기준)
 
-### 🔄 진행 중 — 공고 목록 페이지 (#83, Step a·b 완료)
+### 🔄 진행 중 — 공고 목록 페이지 (#83, Step a·b·c-1 완료 / c-2 PR 진행 중)
 
-Sprint 2의 마지막 조각인 **공개 목록 페이지**. Step a(조회 리포지토리, PR #84)·**Step b(목록 페이지 셸, PR #87) 완료·머지**, 다음은 **Step c(필터·페이지네이션 UI)**. 알림 파이프라인은 전부 완결됐고 남은 건 "웹에서 확인" 경로다.
+Sprint 2의 마지막 조각인 **공개 목록 페이지**. Step a(조회 리포지토리, PR #84)·Step b(목록 페이지 셸, PR #87)·**c-1(리포지토리 필터, PR #89) 완료·머지**. Step c는 **c-1(리포 필터) / c-2(렌더링 모델 전환 + 페이지네이션) / c-3(필터 UI)** 3분할로 진행하며, 현재 **c-2가 PR 진행 중**이다. 알림 파이프라인은 전부 완결됐고 남은 건 "웹에서 확인" 경로다.
+
+**Step c-1 완료·머지**(PR #89, 2026-09-02): `listAnnouncements`에 `filters?: { announcementType?, recruitmentType? }` 추가. 두 차원을 고른 이유는 둘 다 NOT NULL + 닫힌 enum이라 필터 옵션을 코드 상수로 고정할 수 있고 "미기재" 정책이 필요 없기 때문이다. `district`는 nullable이고 `extractDistrict`가 사이트 원문(`view_data`의 마지막 option 텍스트)을 정규화 없이 담아 제외했다. **필터 적용을 `applyFilters` 한 곳으로 모은 것이 핵심** — 목록 조회와 범위 초과 시 fallback count가 같은 조건을 받아야 하고, 한쪽에만 걸리면 에러 없이 `total`만 어긋나 총 페이지 수가 틀린다. 함정: `applyFilters`에 구조적 제약(`T extends { eq(...): T }`)을 걸면 Supabase 빌더의 재귀 제네릭을 물고 들어가 **TS2589**가 난다 — 제약 없는 `T`로 받고 좁히기를 함수 내부에 가뒀다. 유닛 254 → 261.
+
+**Step c-2 (PR 진행 중) — 렌더링 모델을 Cache Components로 전환**. `searchParams`는 request-time API라 읽는 순간 라우트 전체가 동적이 되어 **Step b의 ISR과 양립하지 않는다**(조회가 `fetch`가 아니라 Data Cache 폴백도 없음). `cacheComponents: true`로 켜고, 페이지는 async가 아니게 두어 `searchParams` promise를 Suspense 하위로 내려보내며, 조회는 `'use cache: remote'` + `cacheLife('hours')` + `cacheTag(ANNOUNCEMENTS_CACHE_TAG)`로 감쌌다. cron은 `revalidatePath` → **`revalidateTag(tag, { expire: 0 })`**. 근거·선택지·배제한 접근은 **ADR 013**이 단일 출처, 보편 패턴은 `docs/learning/step83-cache-components.md`(선행 `step83-isr.md`는 §2·§5가 무효가 되어 상단에 포인터만 붙이고 내용은 박제). 페이지네이션 UI는 `AnnouncementPagination`(서버 컴포넌트, 1페이지는 `?page=1`을 붙이지 않음). 브라우저 검증: 69건 → 4페이지, `?page=999` → 빈 페이지 안내, `?page=abc` → 1페이지.
+
+**c-2에서 코드 읽기로 세운 추정 2건이 빌드로 뒤집혔다**(같은 실수 반복 방지): ① `force-dynamic`이 붙은 API 라우트 3개는 "opt-out이라 영향 없음"이 아니라 **`cacheComponents`와 비호환이라 제거 대상**이었다(cron은 `request.headers` 접근으로 동적 실행이 보장되므로 제거해도 안전). ② **Step b의 자격 증명 가드는 근거가 소멸해 제거했다** — PPR에서 목록 조회는 `searchParams` 뒤에 있어 빌드 시점 프리렌더가 아예 호출하지 않는다(env 없는 빌드에서 경고 로그 미출력으로 확인). 근거 없는 가드를 남기면 자격 증명이 빠진 배포가 에러 대신 "공고 없음"으로 위장된다. **미검증 1건**: remote 캐시 핸들러를 Vercel이 자동 제공한다는 것은 문서 서술 의존 — 프리뷰/프로덕션에서 적중 확인 필요(적중 실패해도 기능은 정상, 매 요청 DB 조회로 퇴화).
 
 **Step b 완료·머지**(PR #87, 2026-09-01): `/announcements`가 비로그인으로 최신순 20건을 렌더한다. `formatAnnouncement`(표시용 순수 함수 — 라벨 맵·날짜, 날짜는 `Date` 파싱 없이 문자열로 다룸: DB가 DATE라 UTC 자정 해석으로 렌더 환경 타임존에 따라 하루가 밀린다) + `AnnouncementCard`(표시 전용 서버 컴포넌트, 링크는 알림과 동일한 soco `view.do` — 상세 라우트 생기면 URL 빌더만 교체) + 페이지 라우트 + 홈 링크. 유닛 243 → 254. 학습 문서 **작성 완료**(`docs/learning/step83-isr.md`).
 
-**ISR은 시간 기반 + 온디맨드 병행**으로 확정 — 페이지 `revalidate = 3600`(리터럴이어야 함, 세그먼트 설정은 정적 분석 대상)은 트리거 실패 시 **상한**이고, 정상 경로의 반영 속도는 cron이 저장 성공 후 호출하는 `revalidatePath(ANNOUNCEMENTS_PATH)`가 결정한다. 호출 위치는 `upsert`·`lastBoardId` 갱신 완료 후 발송 전(저장 전이면 낡은 상태를 캐시에 굳히고, 발송 뒤면 발송 지연만큼 웹 반영이 밀린다), **신규 0건이면 미호출**(평시 크롤 대부분이 이 경로 — 내용이 같은데 캐시를 버리면 다음 방문자가 렌더 비용만 다시 문다). 경로 문자열은 어긋나도 조용히 실패하므로 `src/constants/announcements.ts`에서 공유한다. ADR은 쓰지 않았다 — 두 방식 병행은 Next의 표준 조합이고 폐기한 접근이 없어 회귀 위험이 없다(근거는 학습 문서 §3~4).
+**⚠️ 아래 두 문단은 c-2가 대체했다 — 되살리지 말 것** (경위는 ADR 013 "배제한 접근"):
 
-**Step b에서 밟은 함정 — ISR 페이지는 빌드 중에 DB를 부른다.** CI(`ci.yml`)는 env 없이 `pnpm build`를 돌리므로 그대로 두면 **모든 PR의 빌드가 깨진다**(그때까지 DB를 쓰던 코드는 전부 `force-dynamic` 라우트여서 빌드가 건드린 적이 없었다). `fetchFirstPage()`에 자격 증명 존재 가드를 넣어 **설정 부재만 좁게 흡수**하고 조회 실패는 그대로 throw한다 — `try/catch`로 뭉뚱그리면 DB 장애가 "공고 없음"으로 위장된다. 배제한 대안: CI에 테스트 Supabase 시크릿 주입(빌드가 테스트 DB 가동 상태에 묶여, e2e에서 두 번 겪은 pause → `ENOTFOUND` 적색이 빌드 단계로 번진다).
+- ~~**ISR은 시간 기반 + 온디맨드 병행**(페이지 `revalidate = 3600` 상한 + cron의 `revalidatePath(ANNOUNCEMENTS_PATH)`)~~ → **세그먼트 설정은 `cacheComponents`와 비호환이라 제거**했고, 무효화는 태그 기반(`revalidateTag`)으로 옮겼다. 다만 **호출 시점 규칙은 그대로 유효**하다: `upsert`·`lastBoardId` 갱신 완료 후 발송 전(저장 전이면 낡은 상태를 캐시에 굳히고, 발송 뒤면 발송 지연만큼 웹 반영이 밀린다), **신규 0건이면 미호출**(평시 크롤 대부분이 이 경로). 태그 문자열도 경로와 같은 이유로 `src/constants/announcements.ts`에서 공유한다 — 어긋나면 조용히 실패한다.
+- ~~**ISR 페이지는 빌드 중에 DB를 부르므로 자격 증명 가드가 필요하다**~~ → PPR에서는 조회가 `searchParams` 뒤에 있어 **빌드가 호출하지 않는다.** 가드는 제거했다. 다만 배제 사유는 유효하다: **CI에 테스트 Supabase 시크릿을 주입하지 말 것** — 빌드가 테스트 DB 가동 상태에 묶여, e2e에서 두 번 겪은 pause → `ENOTFOUND` 적색이 빌드 단계로 번진다.
 
 **브라우저 검증에서 데이터 표기 오류를 발견해 함께 고쳤다.** 초안의 `모집 {시작} ~ {마감}`이 전 카드에서 `~ 미정`으로 나왔고, 추적 결과 DB 68건 전부 `application_end_date`·`result_date`가 null이었다. 원인은 파서 버그가 아니라 **소스에 그 데이터가 없기 때문** — view.do(boardId 6644) 메타 영역의 날짜 항목은 '공고게시일'·'청약신청일' 둘뿐이고 마감일·발표일이 존재하지 않는다. 카드를 **`청약신청 {날짜}` 단일 날짜 표기**로 바꿨다(`applicationEndDate`는 `parseDetailPage`가 항상 null을 반환해 값이 들어올 경로가 없어 렌더하지 않는다). 파생 결함은 **#86으로 분리** — `parseListJson`이 `optn1`(공고게시일)을 `applicationStartDate`로, `optn4`(청약신청일)를 `applicationEndDate`로 매핑한다. 저장 경로가 `parseDetailPage` 출력만 쓰므로(ADR 003 옵션 B) 현재 잠복 상태이며, 필드명 정정·없는 필드 제거는 스키마 변경이라 별도 판단이 필요하다.
 
-**조회 경로는 서버 전용(service role)으로 확정** — 착수 전 확인 결과 `announcements`(마이그레이션 00001)는 GRANT도 RLS도 없어 **anon 키 직접 조회가 401(`42501`)로 막혀 있다**(Supabase 신규 테이블 자동 GRANT 폐기 2026-05-30~, 00002가 갖춘 "GRANT로 열고 RLS로 잠근다" 패턴에서 `announcements`만 누락). 다만 목록 페이지는 SSG + ISR이라 조회가 서버에서만 일어나고 `announcementsRepository`는 이미 `getSupabaseAdminClient()`(RLS 우회)를 쓰므로 **마이그레이션 없이 진행 가능**하다. 공개 읽기 개방(`GRANT SELECT TO anon` + RLS + 전체 허용 SELECT 정책)은 **클라이언트 사이드 필터가 실제로 필요해지는 Sprint 3**으로 미뤘다 — 근거·배제 사유는 #83 본문. ADR은 쓰지 않았다(마이그레이션 추가는 가역적이라 회귀 위험이 없고, 실제로 여는 Sprint 3 시점에 쓰는 게 근거가 명확).
+**조회 경로는 서버 전용(service role)으로 확정** — 착수 전 확인 결과 `announcements`(마이그레이션 00001)는 GRANT도 RLS도 없어 **anon 키 직접 조회가 401(`42501`)로 막혀 있다**(Supabase 신규 테이블 자동 GRANT 폐기 2026-05-30~, 00002가 갖춘 "GRANT로 열고 RLS로 잠근다" 패턴에서 `announcements`만 누락). 다만 목록 페이지는 조회가 서버에서만 일어나고(c-2 전환 후에도 동일 — `'use cache: remote'` 함수가 서버에서 실행) `announcementsRepository`는 이미 `getSupabaseAdminClient()`(RLS 우회)를 쓰므로 **마이그레이션 없이 진행 가능**하다. 공개 읽기 개방(`GRANT SELECT TO anon` + RLS + 전체 허용 SELECT 정책)은 **클라이언트 사이드 필터가 실제로 필요해지는 Sprint 3**으로 미뤘다 — 근거·배제 사유는 #83 본문. ADR은 쓰지 않았다(마이그레이션 추가는 가역적이라 회귀 위험이 없고, 실제로 여는 Sprint 3 시점에 쓰는 게 근거가 명확).
 
 **Step a 리포지토리 계약 2가지**(Step b가 이어받았고 Step c도 그대로 쓴다): ① `listAnnouncements(client, { page, pageSize }) → { items, total }`, ② **범위를 벗어난 page는 throw가 아니라 빈 페이지 + 실제 total**이므로 404·리다이렉트 판단은 호출자 몫이다(PostgREST가 offset 초과에 빈 배열이 아닌 `PGRST103`/HTTP 416을 반환하는 것을 리포지토리가 흡수). 정렬은 `post_date DESC, board_id DESC` — `post_date`가 DATE(일 단위)라 실 데이터 68건 중 최소 10개 날짜가 중복이고, 동률을 남기면 페이지 경계 row가 누락·중복된다.
 
@@ -121,7 +128,7 @@ Sprint 2 1번 작업(웹 푸시 파이프라인, #39)을 Step(9-a~d)으로 쪼�
 
 - ~~이메일 알림 (#65, ADR 011)~~: **완결·이슈 닫음**(2026-08-28, a→b-1→b-2→c 전부 머지 — 위 "✅ 완료" 섹션). 실발송 수동 스모크만 도메인 검증 시점으로 연기(크롤 트리거 → `notifications.email` 확인, 절차는 `learning/step65-resend` §4의 제약 참고)
 - ~~크롤 파서 row 격리 (#72, ADR 012)~~: **완결·이슈 닫음**(2026-08-31, PR #81 — 위 "✅ 완료" 섹션)
-- 공고 목록 페이지 (#83, Next.js SSG + ISR) — **진행 중**. 조회 리포/페이지 셸/필터·페이지네이션 3단으로 분할했고, **Step a(조회 리포지토리, PR #84)·Step b(목록 페이지 셸 + ISR, PR #87) 완료·머지**. 다음은 **Step c — 필터·페이지네이션 UI**: 클라이언트 직결 쿼리 대신 **URL searchParams + 서버 컴포넌트**로 처리한다(`announcements`에 anon GRANT가 없어 클라이언트 직결 조회는 401 — 공개 읽기 개방은 Sprint 3). Step c가 소비할 Step a 계약: **범위 초과 page는 throw가 아니라 빈 페이지 + 실제 total**이므로 404·리다이렉트 판단은 호출자 몫이고, 잘못된 page/pageSize(비정수·<1)는 `RangeError`이므로 파싱·검증 후 호출해야 한다. `ANNOUNCEMENTS_PAGE_SIZE`는 이미 상수로 분리돼 있어 총 페이지 계산에 그대로 쓴다. `?page=2` 같은 경로도 ISR 대상이 되므로 cron의 `revalidatePath` 범위를 재검토할 것(현재는 `/announcements` 단일 경로만 무효화)
+- 공고 목록 페이지 (#83) — **진행 중**. 조회 리포/페이지 셸/필터·페이지네이션 3단으로 분할했고, 마지막 조각을 다시 **c-1(리포 필터) / c-2(렌더링 모델 + 페이지네이션) / c-3(필터 UI)** 로 쪼갰다. **Step a(PR #84)·b(PR #87)·c-1(PR #89) 완료·머지, c-2는 PR 진행 중**. 남은 것은 **c-3 — 필터 UI**: 클라이언트 직결 쿼리 대신 **URL searchParams + 서버 컴포넌트**로 처리한다(`announcements`에 anon GRANT가 없어 클라이언트 직결 조회는 401 — 공개 읽기 개방은 Sprint 3). c-3이 소비할 계약: ① `listAnnouncements`의 `filters`는 **목록·count 양쪽에 같이 걸린다**(`applyFilters`) — `total`은 항상 필터 적용 후 값이므로 총 페이지 계산에 그대로 쓴다, ② 범위 초과 page는 throw가 아니라 빈 페이지 + 실제 total, ③ 비정수·<1 page는 `RangeError`이므로 `parsePageParam`처럼 조회 전에 정규화해야 한다. c-2 구조 덕에 **필터를 `fetchAnnouncementPage`의 인자로 추가하면 캐시 키가 자동으로 갈라지고 무효화 코드는 무변경**이다. `AnnouncementPagination`은 `baseParams`를 받아 페이지 이동 시 필터 쿼리를 유지하도록 이미 열어뒀다
 - 파서 날짜 매핑 정정 (#86) — `parseListJson`이 `optn1`(공고게시일)·`optn4`(청약신청일)를 `applicationStartDate`/`applicationEndDate`로 잘못 매핑. 저장 경로가 detail만 쓰므로 잠복 상태로 운영 영향 없음. 매핑 정정만 / 필드명까지 / 없는 필드(`applicationEndDate`·`resultDate`) 제거 3단계 중 어디까지 갈지는 스키마 변경 판단 필요 — 2·3안은 ADR 대상 가능
 - 공고 상세 페이지 (동적 라우트 `[boardId]`) — 이게 생기면 알림 URL 빌더(`buildNotificationPayload`·`buildEmailPayload`)를 soco `view.do`에서 내부 상세로 교체할 수 있다(9-c 주석에 명시된 교체 지점)
 - 위 화면 확정 후 UI 디자인 일괄 작업 (v0/Lovable 등)

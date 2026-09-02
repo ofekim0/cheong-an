@@ -29,13 +29,13 @@ vi.mock('@/lib/supabase/crawlStateRepository', () => ({
   getLastBoardId: vi.fn(),
   updateLastBoardId: vi.fn(),
 }));
-// ISR 캐시 무효화(#83 Step b). Next 런타임 밖에서 호출하면 실제 구현이 throw하므로
-// 모킹하고, 여기서는 "언제 부르는가"만 검증한다.
+// 목록 조회 캐시의 태그 무효화(#83 Step c-2, ADR 013). Next 런타임 밖에서 호출하면
+// 실제 구현이 throw하므로 모킹하고, 여기서는 "언제 부르는가"만 검증한다.
 vi.mock('next/cache', () => ({
-  revalidatePath: vi.fn(),
+  revalidateTag: vi.fn(),
 }));
 
-import { revalidatePath } from 'next/cache';
+import { revalidateTag } from 'next/cache';
 
 import { crawlNewAnnouncements } from '@/lib/crawler/announcementService';
 import { runCanary } from '@/lib/crawler/canary';
@@ -229,14 +229,18 @@ describe('GET /api/cron/crawl', () => {
     const response = await GET(makeRequest('Bearer test-secret'));
 
     expect(response.status).toBe(200);
-    expect(revalidatePath).toHaveBeenCalledWith('/announcements');
+    // 경로가 아니라 태그를 버린다 — 쿼리 조합(`?page=2` 등)마다 캐시 항목이
+    // 따로 생기는데 경로 무효화로는 그것들을 지목할 수 없다.
+    // `{ expire: 0 }`이어야 stale을 내보내지 않는다: 알림을 받고 들어온 첫
+    // 방문자가 그 공고가 빠진 목록을 보면 안 된다.
+    expect(revalidateTag).toHaveBeenCalledWith('announcements', { expire: 0 });
 
     // 저장·lastBoardId 갱신 후에 무효화해야 한다 — 먼저 버리면 아직 저장되지 않은
     // 상태를 다시 읽어 캐시에 굳힌다.
     const updateOrder =
       vi.mocked(updateLastBoardId).mock.invocationCallOrder[0];
     const revalidateOrder =
-      vi.mocked(revalidatePath).mock.invocationCallOrder[0];
+      vi.mocked(revalidateTag).mock.invocationCallOrder[0];
     const dispatchOrder = vi.mocked(dispatchNotifications).mock
       .invocationCallOrder[0];
     expect(updateOrder).toBeLessThan(revalidateOrder);
@@ -263,7 +267,7 @@ describe('GET /api/cron/crawl', () => {
     expect(response.status).toBe(200);
     expect((await response.json()).newCount).toBe(0);
     // 내용이 그대로인데 캐시를 버리면 다음 방문자가 전체 렌더 비용만 다시 문다.
-    expect(revalidatePath).not.toHaveBeenCalled();
+    expect(revalidateTag).not.toHaveBeenCalled();
   });
 
   it('upsert 실패 시 캐시를 무효화하지 않는다', async () => {
@@ -284,7 +288,7 @@ describe('GET /api/cron/crawl', () => {
     const response = await GET(makeRequest('Bearer test-secret'));
 
     expect(response.status).toBe(500);
-    expect(revalidatePath).not.toHaveBeenCalled();
+    expect(revalidateTag).not.toHaveBeenCalled();
 
     errSpy.mockRestore();
   });
