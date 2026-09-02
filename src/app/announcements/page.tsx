@@ -3,19 +3,27 @@ import { cacheLife, cacheTag } from 'next/cache';
 import { Suspense } from 'react';
 
 import { AnnouncementCard } from '@/components/announcements/AnnouncementCard';
+import { AnnouncementFilterBar } from '@/components/announcements/AnnouncementFilterBar';
 import { AnnouncementPagination } from '@/components/announcements/AnnouncementPagination';
 import {
   ANNOUNCEMENTS_CACHE_TAG,
   ANNOUNCEMENTS_PAGE_SIZE,
 } from '@/constants/announcements';
 import {
+  filtersToSearchParams,
+  parseAnnouncementFilters,
+  parsePageParam,
+  PAGE_PARAM,
+} from '@/lib/announcements/parseListParams';
+import {
   listAnnouncements,
+  type AnnouncementFilters,
   type AnnouncementListPage,
 } from '@/lib/supabase/announcementsRepository';
 import { getSupabaseAdminClient } from '@/lib/supabase/client';
 
 /**
- * 공고 목록 페이지 (#83, Step c-2 — 페이지네이션 + Cache Components).
+ * 공고 목록 페이지 (#83, Step c-2 페이지네이션 + Cache Components / c-3 필터).
  *
  * 열람은 공개다(비로그인 허용, ADR 009). 구독 액션만 인증을 요구한다.
  *
@@ -36,7 +44,7 @@ export const metadata: Metadata = {
 };
 
 /**
- * 한 페이지를 조회한다. 결과는 `page`를 키로 캐시된다.
+ * 한 페이지를 조회한다. 결과는 `page`와 `filters`를 키로 캐시된다.
  *
  * `remote`인 이유: 이 함수는 `searchParams`를 읽은 뒤에 호출되므로 결과가 static
  * shell에 들어가지 못하고 요청 시점으로 밀린다. 그냥 `'use cache'`면 인스턴스별
@@ -44,7 +52,9 @@ export const metadata: Metadata = {
  * 태그를 무효화하는 설계 자체가 무의미해진다. 캐시 키 조합은 페이지 수 × 필터
  * 조합으로 작고 데이터는 시간 단위로만 바뀌어 적중률 조건도 맞는다.
  *
- * 캐시 키에는 인자가 포함되므로 페이지마다 항목이 따로 생긴다.
+ * 캐시 키에는 인자가 포함되므로 페이지·필터 조합마다 항목이 따로 생긴다.
+ * `filters`의 키 삽입 순서는 `parseAnnouncementFilters`가 고정하므로 같은 조건이
+ * 매번 같은 키로 떨어진다.
  * 무효화는 경로가 아니라 태그로 한다 — 크롤 라우트가 새 공고를 저장한 직후
  * `ANNOUNCEMENTS_CACHE_TAG`를 무효화하면 페이지·필터 조합 수와 무관하게 전부
  * 한 번에 만료된다(ADR 013).
@@ -61,6 +71,7 @@ export const metadata: Metadata = {
  */
 async function fetchAnnouncementPage(
   page: number,
+  filters: AnnouncementFilters,
 ): Promise<AnnouncementListPage> {
   'use cache: remote';
   cacheLife('hours');
@@ -69,6 +80,7 @@ async function fetchAnnouncementPage(
   return listAnnouncements(getSupabaseAdminClient(), {
     page,
     pageSize: ANNOUNCEMENTS_PAGE_SIZE,
+    filters,
   });
 }
 
@@ -84,23 +96,6 @@ async function fetchAnnouncementPage(
 type AnnouncementsSearchParams = Promise<{
   [key: string]: string | string[] | undefined;
 }>;
-
-/**
- * `?page=` 값을 1 이상의 정수로 정규화한다.
- *
- * `listAnnouncements`는 비정수·1 미만 page에 RangeError를 던지는 계약이므로,
- * 조회 전에 여기서 걸러야 한다. 공개 페이지의 쿼리스트링은 누구나 임의로 바꿀 수
- * 있고(`?page=abc`), 그것이 500이 되어선 안 된다 — 잘못된 값은 첫 페이지로 본다.
- */
-function parsePageParam(raw: string | string[] | undefined): number {
-  const value = Array.isArray(raw) ? raw[0] : raw;
-  if (value === undefined) {
-    return 1;
-  }
-
-  const parsed = Number(value);
-  return Number.isInteger(parsed) && parsed >= 1 ? parsed : 1;
-}
 
 /** 목록 로딩 중 static shell에 실려 나가는 자리표시자. */
 function AnnouncementListFallback() {
@@ -121,13 +116,21 @@ async function AnnouncementList({
 }: {
   searchParams: AnnouncementsSearchParams;
 }) {
-  const page = parsePageParam((await searchParams).page);
-  const { items, total } = await fetchAnnouncementPage(page);
+  const params = await searchParams;
+  const page = parsePageParam(params[PAGE_PARAM]);
+  const filters = parseAnnouncementFilters(params);
+
+  const { items, total } = await fetchAnnouncementPage(page, filters);
   const totalPages = Math.max(1, Math.ceil(total / ANNOUNCEMENTS_PAGE_SIZE));
+  const hasFilters = Object.keys(filters).length > 0;
 
   return (
     <>
-      <p className="mb-6 text-sm text-zinc-600">전체 {total}건</p>
+      <AnnouncementFilterBar filters={filters} />
+
+      <p className="mb-6 text-sm text-zinc-600">
+        {hasFilters ? '조건에 맞는 공고' : '전체'} {total}건
+      </p>
 
       {items.length > 0 ? (
         <ul className="flex flex-col gap-3">
@@ -140,15 +143,34 @@ async function AnnouncementList({
         </ul>
       ) : (
         <p className="text-sm text-zinc-500">
-          {total === 0
-            ? '아직 등록된 공고가 없습니다.'
-            : '이 페이지에는 공고가 없습니다.'}
+          {emptyMessage(total, hasFilters)}
         </p>
       )}
 
-      <AnnouncementPagination currentPage={page} totalPages={totalPages} />
+      <AnnouncementPagination
+        currentPage={page}
+        totalPages={totalPages}
+        baseParams={filtersToSearchParams(filters)}
+      />
     </>
   );
+}
+
+/**
+ * 목록이 빈 이유를 구분해 알린다.
+ *
+ * "공고가 하나도 없다"와 "필터에 걸리는 게 없다"와 "이 페이지 번호가 범위를
+ * 넘었다"는 사용자가 취할 행동이 다르다 — 각각 기다리기, 필터 풀기, 앞 페이지로
+ * 돌아가기다. 한 문구로 뭉치면 필터가 걸린 걸 잊은 방문자가 서비스가 비었다고
+ * 오해한다.
+ */
+function emptyMessage(total: number, hasFilters: boolean): string {
+  if (total > 0) {
+    return '이 페이지에는 공고가 없습니다.';
+  }
+  return hasFilters
+    ? '조건에 맞는 공고가 없습니다.'
+    : '아직 등록된 공고가 없습니다.';
 }
 
 export default function AnnouncementsPage({
