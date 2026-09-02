@@ -12,7 +12,7 @@
  *      목록 파싱 단계의 row 격리는 isolatedListRows로 표면화 (ADR 012).
  *   5. announcements UPSERT (불변식 위반 row는 이미 invalidBoardIds로 격리됨).
  *   6. crawl_state.last_board_id / last_crawled_at 갱신.
- *   7. 신규 공고가 있으면 공고 목록 페이지의 ISR 캐시를 무효화 (#83 Step b).
+ *   7. 신규 공고가 있으면 목록 조회 캐시를 태그로 무효화 (#83 Step c-2, ADR 013).
  *   8. 신규 공고가 있으면 채널 어댑터별로 구독 계정에 발송 (9-c → ADR 011
  *      채널 플러그형. 웹 푸시 + 이메일).
  *   9. JSON 응답: { newCount, skippedBoardIds, invalidBoardIds,
@@ -36,13 +36,16 @@
  *     500을 내면 다음 크롤이 같은 공고를 재발송해 중복 알림이 된다. 유실을
  *     수용하고 응답의 notifications.<channel>.error + 로그로만 남긴다.
  *
- * 캐싱: cron 트리거이므로 dynamic = 'force-dynamic'으로 매 호출 실행 보장.
+ * 캐싱: Cache Components(ADR 013)에서는 `dynamic` 세그먼트 설정을 쓸 수 없다
+ * (빌드가 비호환으로 거부한다). 대신 이 핸들러는 `request.headers`를 읽는
+ * 시점에 프리렌더가 중단되어 매 호출 요청 시점에 실행된다 — 인증 검사가
+ * 곧 요청 시점 실행 보장이다.
  */
 
-import { revalidatePath } from 'next/cache';
+import { revalidateTag } from 'next/cache';
 import { NextResponse } from 'next/server';
 
-import { ANNOUNCEMENTS_PATH } from '@/constants/announcements';
+import { ANNOUNCEMENTS_CACHE_TAG } from '@/constants/announcements';
 import { crawlNewAnnouncements } from '@/lib/crawler/announcementService';
 import { runCanary } from '@/lib/crawler/canary';
 import { emailAdapter } from '@/lib/notifications/emailAdapter';
@@ -54,8 +57,6 @@ import {
   getLastBoardId,
   updateLastBoardId,
 } from '@/lib/supabase/crawlStateRepository';
-
-export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request): Promise<NextResponse> {
   const secret = process.env.CRON_SECRET;
@@ -110,9 +111,17 @@ export async function GET(request: Request): Promise<NextResponse> {
     await upsertAnnouncements(client, newDetails);
     await updateLastBoardId(client, latestBoardId);
 
-    // 목록 페이지(ISR)의 캐시를 즉시 버려 다음 방문자가 새 공고를 보게 한다.
-    // 페이지의 `revalidate = 3600`은 이 트리거가 실패했을 때를 위한 상한일 뿐,
+    // 목록 조회 캐시를 즉시 버려 다음 방문자가 새 공고를 보게 한다. 페이지의
+    // `cacheLife('hours')`는 이 트리거가 실패했을 때를 위한 상한일 뿐,
     // 정상 경로의 반영 속도는 여기가 결정한다.
+    //
+    // 경로가 아니라 태그를 무효화한다(ADR 013) — 목록은 `?page=2` 같은 쿼리 조합마다
+    // 캐시 항목이 따로 생기는데, 경로 무효화로는 그 조합들을 지목할 수 없다.
+    //
+    // `{ expire: 0 }`은 "stale을 내보내지 말고 다음 요청에서 새로 읽으라"는 뜻이다.
+    // 기본값인 stale-while-revalidate(`'max'`)를 쓰면 알림을 받고 들어온 첫 방문자가
+    // 정작 그 공고가 빠진 목록을 보게 된다. Route Handler에는 updateTag를 쓸 수 없어
+    // 이 형태가 즉시 만료의 표준 경로다.
     //
     // 저장·lastBoardId 갱신이 끝난 뒤여야 한다 — 먼저 무효화하면 아직 저장되지
     // 않은 상태를 다시 읽어 캐시에 굳힌다. 반대로 발송 뒤로 미루면 발송이 느릴 때
@@ -122,7 +131,7 @@ export async function GET(request: Request): Promise<NextResponse> {
     // 전체 렌더 비용만 다시 문다. Next 내부 캐시 태그 무효화라 네트워크 실패 요소가
     // 없어 알림 발송처럼 격리할 필요는 없다.
     if (newDetails.length > 0) {
-      revalidatePath(ANNOUNCEMENTS_PATH);
+      revalidateTag(ANNOUNCEMENTS_CACHE_TAG, { expire: 0 });
     }
 
     // 발송은 저장·lastBoardId 갱신이 끝난 뒤에만 시도한다. 반대로 하면 발송

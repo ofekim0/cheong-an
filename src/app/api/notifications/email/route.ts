@@ -27,8 +27,6 @@ import { getSessionUser } from '@/lib/auth/getSessionUser';
 import { setChannelPreference } from '@/lib/supabase/notificationPreferencesRepository';
 import { getSupabaseServerClient } from '@/lib/supabase/serverClient';
 
-export const dynamic = 'force-dynamic';
-
 export async function POST(): Promise<NextResponse> {
   const user = await getSessionUser();
   if (!user) {

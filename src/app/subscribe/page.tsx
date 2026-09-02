@@ -1,3 +1,5 @@
+import { Suspense } from 'react';
+
 import { LoginButtons } from '@/components/auth/LoginButtons';
 import { LogoutButton } from '@/components/auth/LogoutButton';
 import { EmailSubscribeButton } from '@/components/notifications/EmailSubscribeButton';
@@ -17,8 +19,11 @@ import { getSupabaseServerClient } from '@/lib/supabase/serverClient';
  *
  * 현재는 흐름 검증용 최소 UI다. 실제 디자인은 Sprint 2 화면이 모두 잡힌 뒤
  * v0/Lovable 등으로 일괄 작업한다.
+ *
+ * Cache Components(ADR 013)에서 세션 조회는 request-time 접근이라 Suspense 경계
+ * 안에 있어야 한다. 제목만 static shell로 먼저 나가고 패널이 스트리밍된다.
  */
-export default async function SubscribePage() {
+async function SubscribePanel() {
   const user = await getSessionUser();
 
   // 채널 선호(계정 단위, ADR 008/011)는 어느 기기에서 보든 같다.
@@ -33,9 +38,7 @@ export default async function SubscribePage() {
       : false;
 
   return (
-    <main className="mx-auto max-w-md p-8">
-      <h1 className="mb-4 text-xl font-bold">알림 구독 (임시)</h1>
-
+    <>
       {user ? (
         <div className="flex flex-col gap-6">
           <div className="flex items-center justify-between gap-3">
@@ -63,6 +66,20 @@ export default async function SubscribePage() {
           <LoginButtons next="/subscribe" />
         </div>
       )}
+    </>
+  );
+}
+
+export default function SubscribePage() {
+  return (
+    <main className="mx-auto max-w-md p-8">
+      <h1 className="mb-4 text-xl font-bold">알림 구독 (임시)</h1>
+
+      <Suspense
+        fallback={<div className="h-24 animate-pulse rounded bg-zinc-100" />}
+      >
+        <SubscribePanel />
+      </Suspense>
     </main>
   );
 }
