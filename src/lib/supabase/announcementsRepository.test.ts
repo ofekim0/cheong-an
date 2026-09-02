@@ -166,9 +166,12 @@ interface QueryResult {
 /**
  * 읽기 경로의 Supabase 체이닝 mock.
  *
- * - 목록 조회: `from().select(cols, {count}).order().order().range()` → listResult
- * - count 조회(fallback): `from().select('board_id', {head: true})` → countResult
+ * - 목록 조회: `from().select(cols, {count}).eq()*.order().order().range()` → listResult
+ * - count 조회(fallback): `from().select('board_id', {head: true}).eq()*` → countResult
  *   head 옵션 유무로 두 경로를 갈라, 한 mock으로 둘 다 검증한다.
+ *
+ * count 경로는 `eq` 체이닝 뒤에 그대로 await되므로 thenable로 만든다 — 실제
+ * PostgREST 빌더도 필터를 더 붙일 수 있으면서 await 가능한 객체다.
  */
 function createReadMockClient(results: {
   list?: QueryResult;
@@ -183,16 +186,26 @@ function createReadMockClient(results: {
 
   const range = vi.fn().mockResolvedValue(listResult);
   const order = vi.fn();
-  const chain = { order, range };
+  const listEq = vi.fn();
+  const chain = { eq: listEq, order, range };
   order.mockReturnValue(chain);
+  listEq.mockReturnValue(chain);
+
+  const countEq = vi.fn();
+  const countChain = {
+    eq: countEq,
+    then: (onFulfilled: (value: QueryResult) => unknown) =>
+      Promise.resolve(countResult).then(onFulfilled),
+  };
+  countEq.mockReturnValue(countChain);
 
   const select = vi.fn((_columns: string, options?: { head?: boolean }) =>
-    options?.head ? Promise.resolve(countResult) : chain,
+    options?.head ? countChain : chain,
   );
   const from = vi.fn().mockReturnValue({ select });
   const client = { from } as unknown as SupabaseClient;
 
-  return { client, from, select, order, range };
+  return { client, from, select, order, range, listEq, countEq };
 }
 
 describe('rowToSummary', () => {
@@ -372,4 +385,112 @@ describe('listAnnouncements', () => {
       expect(from).not.toHaveBeenCalled();
     },
   );
+
+  describe('필터', () => {
+    it('filters를 생략하면 eq 조건을 걸지 않는다', async () => {
+      const { client, listEq } = createReadMockClient({});
+
+      await listAnnouncements(client, { page: 1, pageSize: 20 });
+
+      expect(listEq).not.toHaveBeenCalled();
+    });
+
+    it('announcementType만 지정하면 그 컬럼에만 eq를 건다', async () => {
+      const { client, listEq } = createReadMockClient({});
+
+      await listAnnouncements(client, {
+        page: 1,
+        pageSize: 20,
+        filters: { announcementType: 'public' },
+      });
+
+      expect(listEq.mock.calls).toEqual([['announcement_type', 'public']]);
+    });
+
+    it('recruitmentType만 지정하면 그 컬럼에만 eq를 건다', async () => {
+      const { client, listEq } = createReadMockClient({});
+
+      await listAnnouncements(client, {
+        page: 1,
+        pageSize: 20,
+        filters: { recruitmentType: 'additional' },
+      });
+
+      expect(listEq.mock.calls).toEqual([['recruitment_type', 'additional']]);
+    });
+
+    it('두 차원을 함께 지정하면 eq를 둘 다 건다', async () => {
+      const { client, listEq } = createReadMockClient({});
+
+      await listAnnouncements(client, {
+        page: 1,
+        pageSize: 20,
+        filters: {
+          announcementType: 'private',
+          recruitmentType: 'initial',
+        },
+      });
+
+      expect(listEq.mock.calls).toEqual([
+        ['announcement_type', 'private'],
+        ['recruitment_type', 'initial'],
+      ]);
+    });
+
+    it('값이 undefined인 차원은 제약 없음으로 취급한다', async () => {
+      const { client, listEq } = createReadMockClient({});
+
+      await listAnnouncements(client, {
+        page: 1,
+        pageSize: 20,
+        filters: { announcementType: undefined, recruitmentType: 'initial' },
+      });
+
+      expect(listEq.mock.calls).toEqual([['recruitment_type', 'initial']]);
+    });
+
+    it('필터를 적용한 total을 반환한다', async () => {
+      const { client } = createReadMockClient({
+        list: { data: [buildSummaryRow()], count: 12, error: null },
+      });
+
+      const result = await listAnnouncements(client, {
+        page: 1,
+        pageSize: 20,
+        filters: { announcementType: 'public' },
+      });
+
+      expect(result.total).toBe(12);
+    });
+
+    it('범위 초과 시 fallback count 조회에도 같은 필터를 적용한다', async () => {
+      const { client, countEq } = createReadMockClient({
+        list: {
+          data: null,
+          count: null,
+          error: {
+            code: 'PGRST103',
+            message: 'Requested range not satisfiable',
+          },
+        },
+        count: { count: 12, error: null },
+      });
+
+      const result = await listAnnouncements(client, {
+        page: 999,
+        pageSize: 20,
+        filters: {
+          announcementType: 'public',
+          recruitmentType: 'initial',
+        },
+      });
+
+      // 목록과 count에 필터가 같이 걸려야 total이 "필터 적용 후 건수"가 된다.
+      expect(countEq.mock.calls).toEqual([
+        ['announcement_type', 'public'],
+        ['recruitment_type', 'initial'],
+      ]);
+      expect(result).toEqual({ items: [], total: 12 });
+    });
+  });
 });
