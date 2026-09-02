@@ -73,6 +73,19 @@ async function fetchAnnouncementPage(
 }
 
 /**
+ * `searchParams` prop 타입.
+ *
+ * Next가 생성하는 전역 `PageProps<'/announcements'>` 헬퍼를 쓰지 않는다 — 그 타입은
+ * `next dev`·`next build`·`next typegen`이 `.next/types`에 만들어내므로, **빌드 전에
+ * `tsc --noEmit`을 돌리는 환경에서 `TS2304: Cannot find name 'PageProps'`로 깨진다.**
+ * CI는 typecheck를 build보다 먼저 돌리고, 갓 클론한 저장소도 같은 상태다.
+ * 이 라우트는 동적 세그먼트가 없어 헬퍼의 라우트 리터럴 타이핑이 주는 이점도 없다.
+ */
+type AnnouncementsSearchParams = Promise<{
+  [key: string]: string | string[] | undefined;
+}>;
+
+/**
  * `?page=` 값을 1 이상의 정수로 정규화한다.
  *
  * `listAnnouncements`는 비정수·1 미만 page에 RangeError를 던지는 계약이므로,
@@ -105,7 +118,9 @@ function AnnouncementListFallback() {
  */
 async function AnnouncementList({
   searchParams,
-}: Pick<PageProps<'/announcements'>, 'searchParams'>) {
+}: {
+  searchParams: AnnouncementsSearchParams;
+}) {
   const page = parsePageParam((await searchParams).page);
   const { items, total } = await fetchAnnouncementPage(page);
   const totalPages = Math.max(1, Math.ceil(total / ANNOUNCEMENTS_PAGE_SIZE));
@@ -138,7 +153,9 @@ async function AnnouncementList({
 
 export default function AnnouncementsPage({
   searchParams,
-}: PageProps<'/announcements'>) {
+}: {
+  searchParams: AnnouncementsSearchParams;
+}) {
   return (
     <main className="mx-auto w-full max-w-2xl p-8">
       <header className="mb-6">

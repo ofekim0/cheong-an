@@ -69,6 +69,14 @@ async function List({ searchParams }: Pick<PageProps<'/list'>, 'searchParams'>) 
 
 같은 원리가 `cookies()`·`headers()`·`params`·캐시되지 않은 데이터 접근 전부에 적용된다. **await를 트리 아래로 미루는 것이 이 모델의 유일한 구조적 습관**이다.
 
+> **함정: `PageProps` 같은 전역 헬퍼는 생성된 타입이다.** 위 예시의 `PageProps<'/list'>`는 `next dev`·`next build`·`next typegen`이 `.next/types`에 만들어내는 타입이다. 즉 **빌드 전에 `tsc --noEmit`을 돌리면 `TS2304: Cannot find name 'PageProps'`로 깨진다.** CI가 typecheck를 build보다 먼저 두는 구성(흔한 순서다)이나 갓 클론한 저장소가 그 상태다. 로컬에서는 이미 빌드한 적이 있어 통과하므로 **CI에서만 빨개진다.** 동적 세그먼트가 없는 라우트라면 헬퍼가 주는 이점(라우트 리터럴 기반 `params` 타이핑)이 없으니 `searchParams` 타입을 직접 적는 편이 낫다.
+>
+> ```ts
+> type SearchParams = Promise<{ [key: string]: string | string[] | undefined }>;
+> ```
+>
+> 검증도 CI와 같은 조건으로 해야 한다 — `rm -rf .next && tsc --noEmit`.
+
 ## 3. 세 가지 캐시 디렉티브 — 어느 것을 쓰는가
 
 `'use cache'`는 함수/컴포넌트의 반환값을 캐시한다. **인자와 상위 스코프에서 캡처한 값이 캐시 키가 된다.** 변종이 셋이다.
