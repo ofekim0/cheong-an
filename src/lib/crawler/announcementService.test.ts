@@ -410,7 +410,6 @@ describe('crawlNewAnnouncements', () => {
       detail.district,
       detail.address,
       detail.totalUnits,
-      detail.resultDate,
       detail.attachmentUrl,
     ];
     expect(detailOnly.some((v) => v !== null)).toBe(true);

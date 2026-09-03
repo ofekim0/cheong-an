@@ -24,9 +24,7 @@ function buildDetail(
     address: '서울특별시 강남구 ...',
     totalUnits: 100,
     postDate: '2026-05-01',
-    applicationStartDate: '2026-05-10',
-    applicationEndDate: '2026-05-20',
-    resultDate: '2026-06-01',
+    applicationDate: '2026-05-10',
     attachmentUrl: 'https://example.com/file.pdf',
     attachmentName: '모집공고문.pdf',
     rawContent: '<div>raw html</div>',
@@ -60,9 +58,7 @@ describe('detailToRow', () => {
       address: '서울특별시 강남구 ...',
       total_units: 100,
       post_date: '2026-05-01',
-      application_start_date: '2026-05-10',
-      application_end_date: '2026-05-20',
-      result_date: '2026-06-01',
+      application_date: '2026-05-10',
       attachment_url: 'https://example.com/file.pdf',
       attachment_name: '모집공고문.pdf',
       raw_content: '<div>raw html</div>',
@@ -75,9 +71,7 @@ describe('detailToRow', () => {
       district: null,
       address: null,
       totalUnits: null,
-      applicationStartDate: null,
-      applicationEndDate: null,
-      resultDate: null,
+      applicationDate: null,
       attachmentUrl: null,
       attachmentName: null,
     });
@@ -87,9 +81,7 @@ describe('detailToRow', () => {
     expect(row.district).toBeNull();
     expect(row.address).toBeNull();
     expect(row.total_units).toBeNull();
-    expect(row.application_start_date).toBeNull();
-    expect(row.application_end_date).toBeNull();
-    expect(row.result_date).toBeNull();
+    expect(row.application_date).toBeNull();
     expect(row.attachment_url).toBeNull();
     expect(row.attachment_name).toBeNull();
   });
@@ -151,8 +143,7 @@ function buildSummaryRow(
     complex_name: '비바힐스강변',
     district: '광진구',
     post_date: '2026-08-27',
-    application_start_date: '2026-09-01',
-    application_end_date: '2026-09-10',
+    application_date: '2026-09-01',
     ...overrides,
   };
 }
@@ -218,8 +209,7 @@ describe('rowToSummary', () => {
       complexName: '비바힐스강변',
       district: '광진구',
       postDate: '2026-08-27',
-      applicationStartDate: '2026-09-01',
-      applicationEndDate: '2026-09-10',
+      applicationDate: '2026-09-01',
     });
   });
 
@@ -228,15 +218,13 @@ describe('rowToSummary', () => {
       buildSummaryRow({
         complex_name: null,
         district: null,
-        application_start_date: null,
-        application_end_date: null,
+        application_date: null,
       }),
     );
 
     expect(summary.complexName).toBeNull();
     expect(summary.district).toBeNull();
-    expect(summary.applicationStartDate).toBeNull();
-    expect(summary.applicationEndDate).toBeNull();
+    expect(summary.applicationDate).toBeNull();
   });
 });
 

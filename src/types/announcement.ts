@@ -17,10 +17,14 @@ export interface AnnouncementListItem {
   agency: string | null;
   /** 게시일 (KST 기준 YYYY-MM-DD) */
   postDate: string;
-  /** 모집 시작일 (YYYY-MM-DD) */
-  applicationStartDate: string | null;
-  /** 모집 마감일 (YYYY-MM-DD) */
-  applicationEndDate: string | null;
+  /**
+   * 청약신청일 (YYYY-MM-DD).
+   *
+   * 기간의 시작일이 아니라 단일 지정일이다 — 원본이 노출하는 날짜 항목은
+   * '공고게시일'과 '청약신청일' 둘뿐이고 '모집 마감일'은 존재하지 않는다
+   * (ADR 014).
+   */
+  applicationDate: string | null;
   /** 첨부 파일 ID — view.do에서 다운로드 URL 구성에 사용 */
   attachmentId: string | null;
   /** HTML 본문 (sanitize 전) */
@@ -38,9 +42,8 @@ export interface AnnouncementDetail {
   address: string | null;
   totalUnits: number | null;
   postDate: string; // YYYY-MM-DD
-  applicationStartDate: string | null; // YYYY-MM-DD
-  applicationEndDate: string | null; // YYYY-MM-DD
-  resultDate: string | null; // YYYY-MM-DD
+  /** 청약신청일 — 단일 지정일 (ADR 014) */
+  applicationDate: string | null; // YYYY-MM-DD
   attachmentUrl: string | null;
   attachmentName: string | null;
   rawContent: string;
@@ -58,9 +61,7 @@ export interface AnnouncementRow {
   address: string | null;
   totalUnits: number | null;
   postDate: string;
-  applicationStartDate: string | null;
-  applicationEndDate: string | null;
-  resultDate: string | null;
+  applicationDate: string | null;
   attachmentUrl: string | null;
   attachmentName: string | null;
   rawContent: string;
@@ -84,8 +85,7 @@ export interface AnnouncementSummary {
   complexName: string | null;
   district: string | null;
   postDate: string;
-  applicationStartDate: string | null;
-  applicationEndDate: string | null;
+  applicationDate: string | null;
 }
 
 /** 크롤링 상태 추적 레코드 */

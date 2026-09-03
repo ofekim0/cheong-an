@@ -51,13 +51,7 @@ export function formatDate(date: string): string {
  *
  * 기간(시작 ~ 마감)이 아니라 단일 날짜인 이유: 원본 view.do의 메타 영역이 노출하는
  * 날짜는 '공고게시일'과 '청약신청일' 둘뿐이고, 모집 마감일·발표일 항목은 존재하지
- * 않는다(2026-09-01 boardId 6644로 확인). `AnnouncementSummary.applicationEndDate`는
- * DB 컬럼과 도메인 타입에는 있지만 `parseDetailPage`가 항상 null로 채우므로 값이
- * 들어올 수 없다 — 그래서 여기서 다루지 않는다.
- *
- * `applicationStartDate`라는 필드명은 시작일처럼 읽히지만 실제로 담기는 값은
- * '청약신청일'이다. 필드명 정정은 파서·타입까지 걸린 별건이라 이 모듈은 값의
- * 의미대로 표기만 한다.
+ * 않는다(2026-09-01 boardId 6644로 확인, ADR 014).
  *
  * 없으면 '미정' — 없는 마감일을 기다리게 만드는 '○○ ~ 미정' 표기를 쓰지 않는다.
  */

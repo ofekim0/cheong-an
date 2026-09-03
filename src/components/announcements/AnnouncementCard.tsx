@@ -35,7 +35,7 @@ export function AnnouncementCard({
     complexName,
     district,
     postDate,
-    applicationStartDate,
+    applicationDate,
   } = announcement;
 
   // 자치구·단지명은 각각 nullable이라 있는 것만 모아 구분자로 잇는다.
@@ -65,12 +65,11 @@ export function AnnouncementCard({
         <dl className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-zinc-500">
           {/*
             원본이 노출하는 날짜는 '공고게시일'과 '청약신청일' 둘뿐이다 —
-            모집 마감일 항목이 없어 기간(○○ ~ ○○)으로 표기하지 않는다.
-            AnnouncementSummary.applicationEndDate는 항상 null이라 렌더하지 않는다.
+            모집 마감일 항목이 없어 기간(○○ ~ ○○)으로 표기하지 않는다 (ADR 014).
           */}
           <div className="flex gap-1">
             <dt>청약신청</dt>
-            <dd>{formatApplicationDate(applicationStartDate)}</dd>
+            <dd>{formatApplicationDate(applicationDate)}</dd>
           </div>
           <div className="flex gap-1">
             <dt>게시</dt>

@@ -45,7 +45,7 @@ describe('parseDetailPage', () => {
   it('청약신청일을 추출한다', () => {
     const result = parseDetailPage(fixtureHtml, BOARD_ID);
 
-    expect(result.applicationStartDate).toBe('2026-05-18');
+    expect(result.applicationDate).toBe('2026-05-18');
   });
 
   it('지역구를 추출한다', () => {
