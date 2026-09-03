@@ -38,8 +38,10 @@ describe('parseListJson', () => {
     expect(first.announcementType).toBe('private');
     expect(first.recruitmentType).toBe('additional');
     expect(first.agency).toBe('태운산업개발(주)');
-    expect(first.applicationStartDate).toBe('2026-05-14');
-    expect(first.applicationEndDate).toBe('2026-05-18');
+    // optn4('청약신청일') = 2026-05-18. optn1(2026-05-14)은 공고게시일이라
+    // postDate와 같은 값이고 매핑에 쓰지 않는다 (#86).
+    expect(first.applicationStartDate).toBe('2026-05-18');
+    expect(first.applicationEndDate).toBeNull();
     expect(first.attachmentId).toBe('5f6e0d6f9a9748fca37ed0bb2b949ff5');
     expect(first.postDate).toBe('2026-05-14');
     expect(first.rawContent.length).toBeGreaterThan(0);
@@ -64,12 +66,19 @@ describe('parseListJson', () => {
     expect(parseListJson(noKey)).toEqual({ items: [], isolated: [] });
   });
 
-  it('빈 optn1/optn4/optn3/atchFileId를 null로 변환한다', () => {
+  it('빈 optn4/optn3/atchFileId를 null로 변환한다', () => {
     const [item] = parseListJson(listOf({ ...validRow, optn3: '   ' })).items;
     expect(item.applicationStartDate).toBeNull();
-    expect(item.applicationEndDate).toBeNull();
     expect(item.agency).toBeNull();
     expect(item.attachmentId).toBeNull();
+  });
+
+  it('applicationEndDate는 optn 값과 무관하게 항상 null이다 (#86)', () => {
+    const [item] = parseListJson(
+      listOf({ ...validRow, optn1: '2026-05-14', optn4: '2026-05-18' }),
+    ).items;
+    expect(item.applicationStartDate).toBe('2026-05-18');
+    expect(item.applicationEndDate).toBeNull();
   });
 
   // --- row 격리 (ADR 012, #72) ---

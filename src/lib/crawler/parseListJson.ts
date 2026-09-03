@@ -44,10 +44,15 @@ interface BbsListJsonItem {
   boardId: number;
   nttSj: string;
   content: string | null;
+  /** 공고게시일 — regDate 파생 postDate와 같은 값이라 매핑에 쓰지 않는다 (#86). */
   optn1: string | null;
+  /** 공고 유형 코드 */
   optn2: string | null;
+  /** 사업 주체 */
   optn3: string | null;
+  /** 청약신청일 */
   optn4: string | null;
+  /** 모집 구분 코드 */
   optn5: string | null;
   atchFileId: string | null;
   regDate: number;
@@ -163,8 +168,12 @@ function toListItem(
     recruitmentType: toRecruitmentType(item.optn5, item.nttSj, index),
     agency: nullIfEmpty(item.optn3),
     postDate: toKstDateString(item.regDate),
-    applicationStartDate: nullIfEmpty(item.optn1),
-    applicationEndDate: nullIfEmpty(item.optn4),
+    // optn4가 '청약신청일'이다. optn1('공고게시일')을 시작일로, optn4를 마감일로
+    // 매핑하던 것이 #86 — 원본 view.do 메타 영역의 날짜 항목은 '공고게시일'과
+    // '청약신청일' 둘뿐이라 '모집 마감일'은 소스에 존재하지 않는다. 값이 들어올
+    // 경로가 없으므로 parseDetailPage와 동일하게 null을 채운다.
+    applicationStartDate: nullIfEmpty(item.optn4),
+    applicationEndDate: null,
     attachmentId: nullIfEmpty(item.atchFileId),
     rawContent: item.content ?? '',
   };
