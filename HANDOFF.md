@@ -5,15 +5,27 @@
 
 ---
 
-## 0. 최신 상태 (2026-09-02 기준)
+## 0. 최신 상태 (2026-09-03 기준)
+
+### ✅ 완료 — 공고 날짜 필드 정정 (#86, 2026-09-03 이슈 닫음)
+
+**Step a**(매핑 정정, PR #93) **· Step b**(리네임 + 부재 필드 제거, PR 대기) 머지. 유닛 294 → **295**.
+
+**`parseListJson`의 매핑이 원본과 어긋나 있었다** — `optn1`(공고게시일)을 `applicationStartDate`로, `optn4`(청약신청일)를 `applicationEndDate`로 넣었다. Step a에서 `optn4` → 청약신청일로 옮기고 마감일은 null로 고정했다. `optn1`은 `regDate` 파생 `postDate`와 같은 값이라 매핑에 쓰지 않는다(픽스처 첫 행에서 교차 확인 — `optn1 = postDate = 2026-05-14`).
+
+**Step b는 스키마까지 갔다(ADR 014)** — `applicationStartDate` → `applicationDate`(DB `application_date`) 리네임 + `applicationEndDate`·`resultDate` **제거**(마이그레이션 00004: RENAME + DROP 2건). 제거 근거는 "값이 들어올 경로가 구조적으로 없다"다 — `parseDetailPage`가 하드코딩 null을 반환하고 저장 경로는 detail 출력만 쓴다(ADR 003 옵션 B). 유지 쪽을 배제한 이유는 **되살리는 비용(`ADD COLUMN` 1건) < 남겨두는 비용(모든 신규 소비자가 지불하는 해명 비용)**이고, 실제로 `formatAnnouncement`·`AnnouncementCard`에서 이미 두 번 지불했다(이 Step에서 두 주석 블록 삭제). `subscriptionDate`는 **의도적으로 배제** — 이 코드베이스에서 `subscription`은 웹 푸시 구독을 뜻해 어휘가 충돌한다(ADR 014 축 1). 18파일 +79/−96(순감 48줄)이 이 작업의 성과다 — 없는 필드를 걷어내니 그것을 방어하던 코드·주석이 함께 사라졌다. UI 표기는 이미 단일 날짜라 **동작 변경 없음**.
+
+**⚠️ 머지 후 수동 작업 — 마이그레이션 00004 적용**: 프로덕션 + 테스트(`cheong-an-test`) 양쪽. **적용 전 무손실 확인 쿼리를 실행한다**(쿼리는 마이그레이션 파일 주석에 포함 — `count(application_end_date) = 0 AND count(result_date) = 0`이어야 DROP 진행). 코드와 스키마가 동시에 바뀌어야 하므로 수 분의 스큐가 생기는데, 크롤이 그 구간에 실패해도 `last_board_id`가 전진하지 않아 다음 회차에 자동 복구된다(ADR 014 축 3 — 3-A expand-contract를 배제한 근거).
+
+**상세 페이지 착수 조건이 확정됐다**: 렌더할 날짜는 `postDate`(공고게시일)와 `applicationDate`(청약신청일) **둘뿐**이다. 마감일·발표일은 타입에서 사라졌으므로 더 이상 판단 대상이 아니다.
 
 ### ✅ 완료 — 공고 목록 페이지 (#83, 2026-09-02 이슈 닫음)
 
 **MVP 경로가 연결됐다: 새 공고 → 크롤링 감지 → 구독자 알림 → 웹에서 확인.** Step a(조회 리포지토리, PR #84)·b(목록 페이지 셸, PR #87)·c-1(리포지토리 필터, PR #89)·c-2(렌더링 모델 + 페이지네이션, PR #90)·c-3(필터 UI, PR #91) 전부 머지. 유닛 243 → **294**.
 
-**단, Sprint 2 항목은 3개 남았다** — #86(파서 날짜 매핑, 잠복) / 공고 상세 페이지 / UI 디자인 일괄 작업. 마일스톤(MVP 경로)은 달성했지만 Sprint 종료는 아니므로 **회고는 잔여 3건 완료 후**에 쓴다(지금 쓰면 미완 항목이 그대로 남아 종료 시점에 또 써야 한다).
+**단, Sprint 2 항목은 2개 남았다** — 공고 상세 페이지 / UI 디자인 일괄 작업. 마일스톤(MVP 경로)은 달성했지만 Sprint 종료는 아니므로 **회고는 잔여 2건 완료 후**에 쓴다(지금 쓰면 미완 항목이 그대로 남아 종료 시점에 또 써야 한다).
 
-**다음 작업 순서**(의존 관계상): ~~① `'use cache: remote'` 캐시 적중 확인~~(2026-09-02 완료 — 위 c-2 문단) → **① #86** → ② 상세 페이지 → ③ UI 디자인 → ④ 회고. **#86이 상세 페이지보다 앞인 이유**: #86의 결론(매핑만 정정 / 필드명까지 / 없는 필드 `applicationEndDate`·`resultDate` 제거)이 **상세 페이지가 렌더할 필드 목록을 결정**한다. 순서를 뒤집으면 Step b에서 카드가 전부 `~ 미정`으로 나왔던 판단을 상세 페이지에서 한 번 더 반복하게 된다. 상세 페이지를 먼저 하고 싶다면 그 두 필드를 **아예 렌더하지 않는 것**으로 시작하면 충돌하지 않는다(`parseDetailPage`가 항상 null을 반환하므로 사실에 부합).
+**다음 작업 순서**(의존 관계상): ~~① `'use cache: remote'` 캐시 적중 확인~~(2026-09-02 완료 — 위 c-2 문단) → ~~① #86~~(2026-09-03 완료 — 위 #86 섹션) → **① 상세 페이지** → ② UI 디자인 → ③ 회고. #86을 상세 페이지보다 앞세운 이유는 **#86의 결론이 상세 페이지가 렌더할 필드 목록을 결정**하기 때문이었고, 그 결론이 나왔다 — 날짜는 `postDate`·`applicationDate` 둘뿐이다(ADR 014).
 
 **Step c-3 완료·머지**(PR #91, 2026-09-02) **— 필터 UI**. 공고 유형·모집 구분을 URL 쿼리(`?type=`·`?recruitment=`)로 걸고, `AnnouncementFilterBar`(서버 컴포넌트 + 링크, JS 0)로 노출한다. 파싱은 `src/lib/announcements/parseListParams.ts`로 분리해 테스트를 붙였다(`parsePageParam`도 c-2의 페이지 파일에서 여기로 이동) — 공개 쿼리스트링은 누구나 바꿀 수 있어 "잘못된 입력을 어떻게 다루는가"가 곧 방어선이고, 원칙은 **모르는 값은 무시**(제약 없음으로 취급, 400·500 아님)다. enum이라 화이트리스트로 닫아 검증하고 배열로 온 값은 첫 값만 쓴다. **필터 변경 시 `page`를 버리고, 페이지 이동 시 필터는 유지한다**(`baseParams`) — 전자를 유지하면 4페이지에서 필터를 걸었을 때 빈 화면이 뜬다. 빈 목록 문구는 셋으로 갈랐다(조건 불일치 / 페이지 범위 초과 / 진짜 0건 — 사용자가 취할 행동이 각각 다르다). 유닛 261 → 294. 학습 문서·ADR 없음 — c-2 패턴의 적용이고 ADR 013이 이미 "c-3은 인자 추가로 끝난다"까지 적어뒀다. 프로덕션 스모크로 집계 정합 확인(공공 1 + 민간 68 = 69, 최초 13 + 추가 56 = 69).
 
@@ -32,13 +44,13 @@
 - ~~**ISR은 시간 기반 + 온디맨드 병행**(페이지 `revalidate = 3600` 상한 + cron의 `revalidatePath(ANNOUNCEMENTS_PATH)`)~~ → **세그먼트 설정은 `cacheComponents`와 비호환이라 제거**했고, 무효화는 태그 기반(`revalidateTag`)으로 옮겼다. 다만 **호출 시점 규칙은 그대로 유효**하다: `upsert`·`lastBoardId` 갱신 완료 후 발송 전(저장 전이면 낡은 상태를 캐시에 굳히고, 발송 뒤면 발송 지연만큼 웹 반영이 밀린다), **신규 0건이면 미호출**(평시 크롤 대부분이 이 경로). 태그 문자열도 경로와 같은 이유로 `src/constants/announcements.ts`에서 공유한다 — 어긋나면 조용히 실패한다.
 - ~~**ISR 페이지는 빌드 중에 DB를 부르므로 자격 증명 가드가 필요하다**~~ → PPR에서는 조회가 `searchParams` 뒤에 있어 **빌드가 호출하지 않는다.** 가드는 제거했다. 다만 배제 사유는 유효하다: **CI에 테스트 Supabase 시크릿을 주입하지 말 것** — 빌드가 테스트 DB 가동 상태에 묶여, e2e에서 두 번 겪은 pause → `ENOTFOUND` 적색이 빌드 단계로 번진다.
 
-**브라우저 검증에서 데이터 표기 오류를 발견해 함께 고쳤다.** 초안의 `모집 {시작} ~ {마감}`이 전 카드에서 `~ 미정`으로 나왔고, 추적 결과 DB 68건 전부 `application_end_date`·`result_date`가 null이었다. 원인은 파서 버그가 아니라 **소스에 그 데이터가 없기 때문** — view.do(boardId 6644) 메타 영역의 날짜 항목은 '공고게시일'·'청약신청일' 둘뿐이고 마감일·발표일이 존재하지 않는다. 카드를 **`청약신청 {날짜}` 단일 날짜 표기**로 바꿨다(`applicationEndDate`는 `parseDetailPage`가 항상 null을 반환해 값이 들어올 경로가 없어 렌더하지 않는다). 파생 결함은 **#86으로 분리** — `parseListJson`이 `optn1`(공고게시일)을 `applicationStartDate`로, `optn4`(청약신청일)를 `applicationEndDate`로 매핑한다. 저장 경로가 `parseDetailPage` 출력만 쓰므로(ADR 003 옵션 B) 현재 잠복 상태이며, 필드명 정정·없는 필드 제거는 스키마 변경이라 별도 판단이 필요하다.
+**브라우저 검증에서 데이터 표기 오류를 발견해 함께 고쳤다.** 초안의 `모집 {시작} ~ {마감}`이 전 카드에서 `~ 미정`으로 나왔고, 추적 결과 DB 68건 전부 `application_end_date`·`result_date`가 null이었다. 원인은 파서 버그가 아니라 **소스에 그 데이터가 없기 때문** — view.do(boardId 6644) 메타 영역의 날짜 항목은 '공고게시일'·'청약신청일' 둘뿐이고 마감일·발표일이 존재하지 않는다. 카드를 **`청약신청 {날짜}` 단일 날짜 표기**로 바꿨다(`applicationEndDate`는 `parseDetailPage`가 항상 null을 반환해 값이 들어올 경로가 없어 렌더하지 않는다). 파생 결함은 **#86으로 분리** — `parseListJson`이 `optn1`(공고게시일)을 `applicationStartDate`로, `optn4`(청약신청일)를 `applicationEndDate`로 매핑한다. 저장 경로가 `parseDetailPage` 출력만 쓰므로(ADR 003 옵션 B) 이 시점에는 잠복 상태였고, 필드명 정정·없는 필드 제거는 스키마 변경이라 별도 판단이 필요했다. **※ 이후 #86에서 3안 전부 해소** — 매핑 정정 + `applicationDate` 리네임 + 부재 필드 제거(2026-09-03, ADR 014 · 위 "✅ 완료 — 공고 날짜 필드 정정"). 이 문단의 `applicationStartDate`·`applicationEndDate`는 더 이상 존재하지 않는 필드명이다.
 
 **조회 경로는 서버 전용(service role)으로 확정** — 착수 전 확인 결과 `announcements`(마이그레이션 00001)는 GRANT도 RLS도 없어 **anon 키 직접 조회가 401(`42501`)로 막혀 있다**(Supabase 신규 테이블 자동 GRANT 폐기 2026-05-30~, 00002가 갖춘 "GRANT로 열고 RLS로 잠근다" 패턴에서 `announcements`만 누락). 다만 목록 페이지는 조회가 서버에서만 일어나고(c-2 전환 후에도 동일 — `'use cache: remote'` 함수가 서버에서 실행) `announcementsRepository`는 이미 `getSupabaseAdminClient()`(RLS 우회)를 쓰므로 **마이그레이션 없이 진행 가능**하다. 공개 읽기 개방(`GRANT SELECT TO anon` + RLS + 전체 허용 SELECT 정책)은 **클라이언트 사이드 필터가 실제로 필요해지는 Sprint 3**으로 미뤘다 — 근거·배제 사유는 #83 본문. ADR은 쓰지 않았다(마이그레이션 추가는 가역적이라 회귀 위험이 없고, 실제로 여는 Sprint 3 시점에 쓰는 게 근거가 명확).
 
 **Step a 리포지토리 계약 2가지**(Step b가 이어받았고 Step c도 그대로 쓴다): ① `listAnnouncements(client, { page, pageSize }) → { items, total }`, ② **범위를 벗어난 page는 throw가 아니라 빈 페이지 + 실제 total**이므로 404·리다이렉트 판단은 호출자 몫이다(PostgREST가 offset 초과에 빈 배열이 아닌 `PGRST103`/HTTP 416을 반환하는 것을 리포지토리가 흡수). 정렬은 `post_date DESC, board_id DESC` — `post_date`가 DATE(일 단위)라 실 데이터 68건 중 최소 10개 날짜가 중복이고, 동률을 남기면 페이지 경계 row가 누락·중복된다.
 
-**이슈 정리**(2026-08-31): 완료됐는데 열려 있던 #6(Vercel 연동)·#39(웹 푸시)·#42(크롤 동결)·#50(소셜 로그인)을 근거 코멘트와 함께 닫았다. #50은 카카오 실 브라우저 로그인 스모크만 미검증이며(코드 경로는 provider 무관 동일) 이슈 코멘트에 남겼다. #83도 2026-09-02에 닫았으므로(위 "✅ 완료 — 공고 목록 페이지") **현재 열린 이슈는 #86**(파서 날짜 매핑, 잠복) 하나다.
+**이슈 정리**(2026-08-31): 완료됐는데 열려 있던 #6(Vercel 연동)·#39(웹 푸시)·#42(크롤 동결)·#50(소셜 로그인)을 근거 코멘트와 함께 닫았다. #50은 카카오 실 브라우저 로그인 스모크만 미검증이며(코드 경로는 provider 무관 동일) 이슈 코멘트에 남겼다. #83(2026-09-02)·#86(2026-09-03)도 닫았으므로 **현재 열린 이슈는 없다.** 남은 Sprint 2 항목(상세 페이지·UI 디자인)은 착수 시점에 Issue를 만든다.
 
 ### ✅ 완료 — 크롤 파서 row 격리 (#72, 2026-08-31 이슈 닫음)
 
@@ -117,9 +129,11 @@ Sprint 2 1번 작업(웹 푸시 파이프라인, #39)을 Step(9-a~d)으로 쪼�
 | 목록 Step c-1   | 조회 필터 지원 (#83): `listAnnouncements`에 `filters`(`announcementType`·`recruitmentType`) + **`applyFilters` 단일 지점**(목록 조회와 범위 초과 fallback count가 같은 조건을 받아야 함 — 한쪽만 걸리면 에러 없이 `total`만 어긋나 총 페이지 수가 틀린다). `district`는 nullable·비정규화로 제외(Sprint 3 재검토). 구조적 제약 제네릭은 Supabase 빌더 재귀 타입에서 TS2589 → 좁히기를 함수 내부에 가둠. 유닛 261 | PR #89                                                                                              |
 | 목록 Step c-2   | 페이지네이션 + **렌더링 모델 전환** (#83): `searchParams`가 request-time API라 ISR과 양립 불가 → `cacheComponents`(PPR)로 전환. static shell + `'use cache: remote'` + `cacheTag`, cron은 `revalidateTag(tag, { expire: 0 })`(경로 무효화는 쿼리 조합을 지목 못 함). `dynamic`·`revalidate` 세그먼트 설정은 비호환이라 전면 제거(API 3곳), `/subscribe`도 Suspense 분리. 1페이지는 `?page=1` 미부착. 유닛 261    | **ADR 013**; PR #90; `learning/step83-cache-components`                                             |
 | 목록 Step c-3   | 필터 UI (#83): `AnnouncementFilterBar`(서버 컴포넌트 + 링크, JS 0) + `parseListParams`(화이트리스트 검증 — **모르는 값은 무시**, `parsePageParam` 이관, round-trip 테스트) + 필터 변경 시 `page` 리셋·페이지 이동 시 필터 유지 + 빈 목록 문구 3분기. 유닛 294. **#83 완결·이슈 닫음**                                                                                                                            | PR #91                                                                                              |
+| 날짜 필드 a     | 목록 파서 매핑 정정 (#86): `applicationStartDate` ← `optn4`(청약신청일), 마감일은 null 고정. `optn1`(공고게시일)은 `regDate` 파생 `postDate`와 같은 값이라 미사용. `BbsListJsonItem`의 optn1~5에 의미 주석(같은 오매핑 재발 방지). 유닛 295                                                                                                                                                                      | PR #93                                                                                              |
+| 날짜 필드 b     | 필드명 리네임 + 부재 필드 제거 (#86): `applicationStartDate`→`applicationDate`(DB `application_date`) + `applicationEndDate`·`resultDate` **제거**(마이그레이션 00004 RENAME+DROP). 해명 주석 2블록 삭제, UI 동작 무변경. 18파일 +79/−96. **※ 되살리기 전 ADR 014 필독** — `subscriptionDate`(웹 푸시 구독과 어휘 충돌)·필드 유지·expand-contract 3건을 배제한 근거가 거기 있다                                  | **ADR 014**; PR 대기                                                                                |
 | 운영·회고       | Sprint 1 운영 검증 (GHA dispatch 2회 success, `last_board_id` 6561 갱신) + Sprint 1 회고                                                                                                                                                                                                                                                                                                                         | `retrospectives/sprint-1`                                                                           |
 
-> ADR 전체: `docs/adr/` — 001 기술스택, 002/003 데이터소스·매핑, 004 스케줄러, 005 부트스트랩, 006 크롤 출력 검증, 007 크롤 범위, 008 구독 저장 모델(구독 의사/배달 채널 분리), 009 소셜 로그인, 010 E2E 테스트 전략(소유 표면 자동화 + 실 OAuth·FCM 경계), 011 멀티채널 알림 모델(역량 기반 opt-in + 채널 플러그형 발송), 012 목록 파서 row 격리(격리 vs 중단 경계 — 국지적 오입력은 격리, 전면 붕괴는 `LIST_EMPTY`로 중단), 013 목록 페이지 렌더링 모델(Cache Components 전환 + 태그 기반 무효화 — 폐기한 접근 5건 포함).
+> ADR 전체: `docs/adr/` — 001 기술스택, 002/003 데이터소스·매핑, 004 스케줄러, 005 부트스트랩, 006 크롤 출력 검증, 007 크롤 범위, 008 구독 저장 모델(구독 의사/배달 채널 분리), 009 소셜 로그인, 010 E2E 테스트 전략(소유 표면 자동화 + 실 OAuth·FCM 경계), 011 멀티채널 알림 모델(역량 기반 opt-in + 채널 플러그형 발송), 012 목록 파서 row 격리(격리 vs 중단 경계 — 국지적 오입력은 격리, 전면 붕괴는 `LIST_EMPTY`로 중단), 013 목록 페이지 렌더링 모델(Cache Components 전환 + 태그 기반 무효화 — 폐기한 접근 5건 포함), 014 공고 날짜 필드 정정(리네임·부재 필드 제거·마이그레이션 순서 3축 — "소스에 없는 것은 타입이 표현하지 않는다").
 
 ### Sprint 1 완료 — 다음 Sprint 2 시작 준비
 
@@ -140,11 +154,11 @@ Sprint 2 1번 작업(웹 푸시 파이프라인, #39)을 Step(9-a~d)으로 쪼�
 - ~~이메일 알림 (#65, ADR 011)~~: **완결·이슈 닫음**(2026-08-28, a→b-1→b-2→c 전부 머지 — 위 "✅ 완료" 섹션). 실발송 수동 스모크만 도메인 검증 시점으로 연기(크롤 트리거 → `notifications.email` 확인, 절차는 `learning/step65-resend` §4의 제약 참고)
 - ~~크롤 파서 row 격리 (#72, ADR 012)~~: **완결·이슈 닫음**(2026-08-31, PR #81 — 위 "✅ 완료" 섹션)
 - ~~공고 목록 페이지 (#83)~~: **완결·이슈 닫음**(2026-09-02, Step a→b→c-1→c-2→c-3 전부 머지 — 위 "✅ 완료" 섹션). 이월 항목이던 `'use cache: remote'` 캐시 적중도 프로덕션에서 확인 완료(ADR 013 "캐시 적중 검증")
-- 파서 날짜 매핑 정정 (#86) — `parseListJson`이 `optn1`(공고게시일)·`optn4`(청약신청일)를 `applicationStartDate`/`applicationEndDate`로 잘못 매핑. 저장 경로가 detail만 쓰므로 잠복 상태로 운영 영향 없음. 매핑 정정만 / 필드명까지 / 없는 필드(`applicationEndDate`·`resultDate`) 제거 3단계 중 어디까지 갈지는 스키마 변경 판단 필요 — 2·3안은 ADR 대상 가능
-- 공고 상세 페이지 (동적 라우트 `[boardId]`) — 이게 생기면 알림 URL 빌더(`buildNotificationPayload`·`buildEmailPayload`)를 soco `view.do`에서 내부 상세로 교체할 수 있다(9-c 주석에 명시된 교체 지점)
+- ~~파서 날짜 매핑 정정 (#86, ADR 014)~~: **완결·이슈 닫음**(2026-09-03, Step a→b 머지 — 위 "✅ 완료" 섹션). 3안 전부 진행(매핑 정정 + `applicationDate` 리네임 + 부재 필드 제거). **머지 후 마이그레이션 00004 수동 적용이 남는다**(프로덕션 + 테스트, 적용 전 null 확인 쿼리)
+- 공고 상세 페이지 (동적 라우트 `[boardId]`) — 이게 생기면 알림 URL 빌더(`buildNotificationPayload`·`buildEmailPayload`)를 soco `view.do`에서 내부 상세로 교체할 수 있다(9-c 주석에 명시된 교체 지점). 렌더할 날짜는 `postDate`·`applicationDate` 둘뿐이다(ADR 014 — 마감일·발표일은 타입에서 제거됨)
 - 위 화면 확정 후 UI 디자인 일괄 작업 (v0/Lovable 등)
 
-마일스톤 = MVP 완성: 새 공고 → 크롤링 감지 → 구독자 알림 → 웹에서 확인. **2026-09-02 #83 완결로 이 경로는 연결됐다.** 남은 세 항목(#86·상세 페이지·UI 디자인)은 MVP 경로 위의 개선이며, 셋을 끝낸 뒤 Sprint 2 회고를 쓴다.
+마일스톤 = MVP 완성: 새 공고 → 크롤링 감지 → 구독자 알림 → 웹에서 확인. **2026-09-02 #83 완결로 이 경로는 연결됐다.** 남은 두 항목(상세 페이지·UI 디자인)은 MVP 경로 위의 개선이며, 둘을 끝낸 뒤 Sprint 2 회고를 쓴다.
 
 #### 미해결 부수 의문 (운영에 영향 없음, 추후 확인)
 
