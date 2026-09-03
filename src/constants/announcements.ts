@@ -12,6 +12,16 @@ export const ANNOUNCEMENTS_PAGE_SIZE = 20;
 export const ANNOUNCEMENTS_PATH = '/announcements';
 
 /**
+ * 공고 상세 페이지 경로 (#96).
+ *
+ * 목록 카드와 알림 URL 빌더가 공유한다 — 둘이 같은 곳을 가리켜야 하고,
+ * 경로 문자열이 갈라지면 한쪽만 404가 된다.
+ */
+export function buildAnnouncementPath(boardId: number): string {
+  return `${ANNOUNCEMENTS_PATH}/${boardId}`;
+}
+
+/**
  * 목록 조회 캐시에 붙이는 태그.
  *
  * 크롤 라우트가 새 공고를 저장한 직후 이 태그를 무효화한다(ADR 013). 경로가 아니라

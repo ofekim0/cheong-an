@@ -5,9 +5,12 @@ import type { AnnouncementDetail } from '@/types/announcement';
 
 import {
   detailToRow,
+  getAnnouncementByBoardId,
   listAnnouncements,
+  rowToAnnouncement,
   rowToSummary,
   upsertAnnouncements,
+  type AnnouncementFullRow,
   type AnnouncementSummaryRow,
 } from './announcementsRepository';
 
@@ -480,5 +483,153 @@ describe('listAnnouncements', () => {
       ]);
       expect(result).toEqual({ items: [], total: 12 });
     });
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/* 상세 조회 (#96)                                                     */
+/* ------------------------------------------------------------------ */
+
+function buildFullRow(
+  overrides: Partial<AnnouncementFullRow> = {},
+): AnnouncementFullRow {
+  return {
+    id: 42,
+    board_id: 6644,
+    title: '[민간임대] 강변역 비바힐스강변 추가모집공고',
+    announcement_type: 'private',
+    recruitment_type: 'additional',
+    complex_name: '비바힐스강변',
+    district: '광진구',
+    address: '서울특별시 광진구 ...',
+    total_units: 120,
+    post_date: '2026-08-27',
+    application_date: '2026-08-31',
+    attachment_url: 'https://soco.seoul.go.kr/youth/fileDown.do?id=abc',
+    attachment_name: '모집공고문.pdf',
+    raw_content: '단지명: 비바힐스강변\n주택위치: 서울특별시 광진구 ...',
+    created_at: '2026-08-27T00:00:00Z',
+    updated_at: '2026-08-27T00:00:00Z',
+    ...overrides,
+  };
+}
+
+/**
+ * `from().select('*').eq().single()` 체인 mock.
+ * 목록 쪽 `createReadMockClient`와 분리한 이유: 상세는 `single()`로 끝나 count
+ * 분기가 없고, 한 mock에 두 형태를 합치면 어느 경로가 검증됐는지 흐려진다.
+ */
+function createSingleMockClient(result: QueryResult) {
+  const single = vi.fn().mockResolvedValue(result);
+  const eq = vi.fn().mockReturnValue({ single });
+  const select = vi.fn().mockReturnValue({ eq });
+  const from = vi.fn().mockReturnValue({ select });
+  const client = { from } as unknown as SupabaseClient;
+  return { client, from, select, eq, single };
+}
+
+describe('rowToAnnouncement', () => {
+  it('전체 row를 camelCase 도메인 타입으로 매핑한다', () => {
+    expect(rowToAnnouncement(buildFullRow())).toEqual({
+      id: 42,
+      boardId: 6644,
+      title: '[민간임대] 강변역 비바힐스강변 추가모집공고',
+      announcementType: 'private',
+      recruitmentType: 'additional',
+      complexName: '비바힐스강변',
+      district: '광진구',
+      address: '서울특별시 광진구 ...',
+      totalUnits: 120,
+      postDate: '2026-08-27',
+      applicationDate: '2026-08-31',
+      attachmentUrl: 'https://soco.seoul.go.kr/youth/fileDown.do?id=abc',
+      attachmentName: '모집공고문.pdf',
+      rawContent: '단지명: 비바힐스강변\n주택위치: 서울특별시 광진구 ...',
+      createdAt: '2026-08-27T00:00:00Z',
+      updatedAt: '2026-08-27T00:00:00Z',
+    });
+  });
+
+  it('nullable 필드의 null을 보존한다', () => {
+    const row = rowToAnnouncement(
+      buildFullRow({
+        complex_name: null,
+        district: null,
+        address: null,
+        total_units: null,
+        application_date: null,
+        attachment_url: null,
+        attachment_name: null,
+      }),
+    );
+
+    expect(row.complexName).toBeNull();
+    expect(row.district).toBeNull();
+    expect(row.address).toBeNull();
+    expect(row.totalUnits).toBeNull();
+    expect(row.applicationDate).toBeNull();
+    expect(row.attachmentUrl).toBeNull();
+    expect(row.attachmentName).toBeNull();
+  });
+});
+
+describe('getAnnouncementByBoardId', () => {
+  it('board_id로 조회해 도메인 타입으로 반환한다', async () => {
+    const { client, from, select, eq } = createSingleMockClient({
+      data: buildFullRow(),
+      error: null,
+    });
+
+    const row = await getAnnouncementByBoardId(client, 6644);
+
+    expect(from).toHaveBeenCalledWith('announcements');
+    // 목록과 달리 컬럼을 고르지 않는다 — 1건이고 본문이 렌더 대상이다.
+    expect(select).toHaveBeenCalledWith('*');
+    expect(eq).toHaveBeenCalledWith('board_id', 6644);
+    expect(row?.boardId).toBe(6644);
+    expect(row?.rawContent).toContain('비바힐스강변');
+  });
+
+  it('없는 boardId는 throw가 아니라 null을 반환한다', async () => {
+    // PostgREST의 single()은 0건을 빈 데이터가 아니라 PGRST116 에러로 돌려준다.
+    const { client } = createSingleMockClient({
+      data: null,
+      error: { message: 'no rows', code: 'PGRST116' },
+    });
+
+    await expect(getAnnouncementByBoardId(client, 999999)).resolves.toBeNull();
+  });
+
+  it('그 밖의 Supabase 에러는 throw한다', async () => {
+    const { client } = createSingleMockClient({
+      data: null,
+      error: { message: 'permission denied', code: '42501' },
+    });
+
+    await expect(getAnnouncementByBoardId(client, 6644)).rejects.toThrow(
+      /permission denied/,
+    );
+  });
+
+  it('양의 정수가 아닌 boardId는 RangeError', async () => {
+    const { client, from } = createSingleMockClient({
+      data: null,
+      error: null,
+    });
+
+    await expect(getAnnouncementByBoardId(client, 0)).rejects.toThrow(
+      RangeError,
+    );
+    await expect(getAnnouncementByBoardId(client, -1)).rejects.toThrow(
+      RangeError,
+    );
+    await expect(getAnnouncementByBoardId(client, 1.5)).rejects.toThrow(
+      RangeError,
+    );
+    await expect(getAnnouncementByBoardId(client, NaN)).rejects.toThrow(
+      RangeError,
+    );
+    // 검증이 먼저라 Supabase를 부르지 않는다.
+    expect(from).not.toHaveBeenCalled();
   });
 });

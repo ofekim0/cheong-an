@@ -27,7 +27,11 @@ export interface AnnouncementListItem {
   applicationDate: string | null;
   /** 첨부 파일 ID — view.do에서 다운로드 URL 구성에 사용 */
   attachmentId: string | null;
-  /** HTML 본문 (sanitize 전) */
+  /**
+   * HTML 본문 (sanitize 전). 목록 JSON의 `content` 원문이라 태그가 들어 있다.
+   * 저장에는 도달하지 않는다 — 저장 경로는 `parseDetailPage` 출력만 쓴다
+   * (ADR 003 옵션 B). DB에 들어가는 본문은 `AnnouncementDetail.rawContent`(평문)다.
+   */
   rawContent: string;
 }
 
@@ -46,6 +50,14 @@ export interface AnnouncementDetail {
   applicationDate: string | null; // YYYY-MM-DD
   attachmentUrl: string | null;
   attachmentName: string | null;
+  /**
+   * 공고 본문 **평문**. `AnnouncementListItem.rawContent`(목록 JSON의 HTML)와
+   * 달리 `parseDetailPage`가 `$('div.board_cont').text()`로 뽑은 텍스트다.
+   *
+   * 저장되는 것은 항상 이쪽이다(ADR 003 옵션 B — 저장 경로는 detail 출력만 쓴다).
+   * 따라서 DB에서 읽은 본문은 렌더 시 HTML sanitize가 필요 없고, 대신 줄바꿈·공백
+   * 보존이 표기 과제가 된다(#96).
+   */
   rawContent: string;
 }
 
