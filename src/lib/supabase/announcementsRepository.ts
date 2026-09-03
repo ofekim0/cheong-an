@@ -31,9 +31,7 @@ export interface AnnouncementInsertRow {
   address: string | null;
   total_units: number | null;
   post_date: string;
-  application_start_date: string | null;
-  application_end_date: string | null;
-  result_date: string | null;
+  application_date: string | null;
   attachment_url: string | null;
   attachment_name: string | null;
   raw_content: string;
@@ -54,9 +52,7 @@ export function detailToRow(detail: AnnouncementDetail): AnnouncementInsertRow {
     address: detail.address,
     total_units: detail.totalUnits,
     post_date: detail.postDate,
-    application_start_date: detail.applicationStartDate,
-    application_end_date: detail.applicationEndDate,
-    result_date: detail.resultDate,
+    application_date: detail.applicationDate,
     attachment_url: detail.attachmentUrl,
     attachment_name: detail.attachmentName,
     raw_content: detail.rawContent,
@@ -106,8 +102,7 @@ const SUMMARY_COLUMNS = [
   'complex_name',
   'district',
   'post_date',
-  'application_start_date',
-  'application_end_date',
+  'application_date',
 ].join(', ');
 
 /** 목록 조회 결과 row 형태 (snake_case). */
@@ -119,8 +114,7 @@ export interface AnnouncementSummaryRow {
   complex_name: string | null;
   district: string | null;
   post_date: string;
-  application_start_date: string | null;
-  application_end_date: string | null;
+  application_date: string | null;
 }
 
 /**
@@ -136,8 +130,7 @@ export function rowToSummary(row: AnnouncementSummaryRow): AnnouncementSummary {
     complexName: row.complex_name,
     district: row.district,
     postDate: row.post_date,
-    applicationStartDate: row.application_start_date,
-    applicationEndDate: row.application_end_date,
+    applicationDate: row.application_date,
   };
 }
 

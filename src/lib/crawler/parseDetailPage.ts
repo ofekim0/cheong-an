@@ -48,9 +48,7 @@ export function parseDetailPage(
     address,
     totalUnits,
     postDate: meta.postDate,
-    applicationStartDate: meta.applicationStartDate,
-    applicationEndDate: null,
-    resultDate: null,
+    applicationDate: meta.applicationDate,
     attachmentUrl,
     attachmentName,
     rawContent,
@@ -69,7 +67,7 @@ function parseRecruitmentType(title: string): RecruitmentType {
 
 function extractMeta($: cheerio.CheerioAPI) {
   let postDate = '';
-  let applicationStartDate: string | null = null;
+  let applicationDate: string | null = null;
 
   $('ul.view_data > li').each((_, el) => {
     const $li = $(el);
@@ -80,11 +78,11 @@ function extractMeta($: cheerio.CheerioAPI) {
     if (label === '공고게시일') {
       postDate = value;
     } else if (label === '청약신청일') {
-      applicationStartDate = value || null;
+      applicationDate = value || null;
     }
   });
 
-  return { postDate, applicationStartDate };
+  return { postDate, applicationDate };
 }
 
 function extractDistrict($: cheerio.CheerioAPI): string | null {

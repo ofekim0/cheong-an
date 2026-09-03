@@ -170,10 +170,8 @@ function toListItem(
     postDate: toKstDateString(item.regDate),
     // optn4가 '청약신청일'이다. optn1('공고게시일')을 시작일로, optn4를 마감일로
     // 매핑하던 것이 #86 — 원본 view.do 메타 영역의 날짜 항목은 '공고게시일'과
-    // '청약신청일' 둘뿐이라 '모집 마감일'은 소스에 존재하지 않는다. 값이 들어올
-    // 경로가 없으므로 parseDetailPage와 동일하게 null을 채운다.
-    applicationStartDate: nullIfEmpty(item.optn4),
-    applicationEndDate: null,
+    // '청약신청일' 둘뿐이라 '모집 마감일'은 소스에 존재하지 않는다 (ADR 014).
+    applicationDate: nullIfEmpty(item.optn4),
     attachmentId: nullIfEmpty(item.atchFileId),
     rawContent: item.content ?? '',
   };
