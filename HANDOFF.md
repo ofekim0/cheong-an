@@ -15,7 +15,9 @@
 
 **Step b는 스키마까지 갔다(ADR 014)** — `applicationStartDate` → `applicationDate`(DB `application_date`) 리네임 + `applicationEndDate`·`resultDate` **제거**(마이그레이션 00004: RENAME + DROP 2건). 제거 근거는 "값이 들어올 경로가 구조적으로 없다"다 — `parseDetailPage`가 하드코딩 null을 반환하고 저장 경로는 detail 출력만 쓴다(ADR 003 옵션 B). 유지 쪽을 배제한 이유는 **되살리는 비용(`ADD COLUMN` 1건) < 남겨두는 비용(모든 신규 소비자가 지불하는 해명 비용)**이고, 실제로 `formatAnnouncement`·`AnnouncementCard`에서 이미 두 번 지불했다(이 Step에서 두 주석 블록 삭제). `subscriptionDate`는 **의도적으로 배제** — 이 코드베이스에서 `subscription`은 웹 푸시 구독을 뜻해 어휘가 충돌한다(ADR 014 축 1). 18파일 +79/−96(순감 48줄)이 이 작업의 성과다 — 없는 필드를 걷어내니 그것을 방어하던 코드·주석이 함께 사라졌다. UI 표기는 이미 단일 날짜라 **동작 변경 없음**.
 
-**⚠️ 머지 후 수동 작업 — 마이그레이션 00004 적용**: 프로덕션 + 테스트(`cheong-an-test`) 양쪽. **적용 전 무손실 확인 쿼리를 실행한다**(쿼리는 마이그레이션 파일 주석에 포함 — `count(application_end_date) = 0 AND count(result_date) = 0`이어야 DROP 진행). 코드와 스키마가 동시에 바뀌어야 하므로 수 분의 스큐가 생기는데, 크롤이 그 구간에 실패해도 `last_board_id`가 전진하지 않아 다음 회차에 자동 복구된다(ADR 014 축 3 — 3-A expand-contract를 배제한 근거).
+**✅ 마이그레이션 00004 적용·검증 완료**(2026-09-03): 프로덕션 + 테스트(`cheong-an-test`) 양쪽 적용. 적용 후 `information_schema.columns`로 `application_date` 존재·구 컬럼 3개(`application_start_date`·`application_end_date`·`result_date`) 부재를 확인했고, 목록 페이지 정상 표기(읽기 경로)와 Crawl 수동 dispatch 200·카나리 위반 0·알림 0건(`latestBoardId` 6645)을 확인했다. 스큐 구간은 닫혔다.
+
+**쓰기 경로를 스키마 조회로 확정한 이유**(같은 검증이 다시 필요할 때 되짚을 것): dispatch 회차가 `newCount: 0`이라 `upsertAnnouncements`는 빈 배열에서 즉시 반환해 Supabase를 호출하지 않았다 — UPSERT 자체는 안 타봤다. 실제 쓰기를 유발하려면 `last_board_id`를 낮춰 재크롤해야 하는데, **`dispatchNotifications`는 재감지 공고를 신규와 구분하지 않으므로 구독자에게 실제 발송이 나간다**(`route.ts`의 `details: newDetails`). 그래서 스키마 조회로 대체했다: `detailToRow`가 만드는 컬럼명 13개는 유닛 테스트가 `toEqual`로 고정하고 tsc가 검사하므로 코드 측은 이미 확정이고, 남은 불확실성은 "실제 DB 컬럼명이 그것과 같은가" 하나였다. 부작용 0으로 같은 결론에 도달한다.
 
 **상세 페이지 착수 조건이 확정됐다**: 렌더할 날짜는 `postDate`(공고게시일)와 `applicationDate`(청약신청일) **둘뿐**이다. 마감일·발표일은 타입에서 사라졌으므로 더 이상 판단 대상이 아니다.
 
@@ -154,7 +156,7 @@ Sprint 2 1번 작업(웹 푸시 파이프라인, #39)을 Step(9-a~d)으로 쪼�
 - ~~이메일 알림 (#65, ADR 011)~~: **완결·이슈 닫음**(2026-08-28, a→b-1→b-2→c 전부 머지 — 위 "✅ 완료" 섹션). 실발송 수동 스모크만 도메인 검증 시점으로 연기(크롤 트리거 → `notifications.email` 확인, 절차는 `learning/step65-resend` §4의 제약 참고)
 - ~~크롤 파서 row 격리 (#72, ADR 012)~~: **완결·이슈 닫음**(2026-08-31, PR #81 — 위 "✅ 완료" 섹션)
 - ~~공고 목록 페이지 (#83)~~: **완결·이슈 닫음**(2026-09-02, Step a→b→c-1→c-2→c-3 전부 머지 — 위 "✅ 완료" 섹션). 이월 항목이던 `'use cache: remote'` 캐시 적중도 프로덕션에서 확인 완료(ADR 013 "캐시 적중 검증")
-- ~~파서 날짜 매핑 정정 (#86, ADR 014)~~: **완결·이슈 닫음**(2026-09-03, Step a→b 머지 — 위 "✅ 완료" 섹션). 3안 전부 진행(매핑 정정 + `applicationDate` 리네임 + 부재 필드 제거). **머지 후 마이그레이션 00004 수동 적용이 남는다**(프로덕션 + 테스트, 적용 전 null 확인 쿼리)
+- ~~파서 날짜 매핑 정정 (#86, ADR 014)~~: **완결·이슈 닫음**(2026-09-03, Step a→b 머지 — 위 "✅ 완료" 섹션). 3안 전부 진행(매핑 정정 + `applicationDate` 리네임 + 부재 필드 제거). **마이그레이션 00004 적용·검증 완료**(프로덕션 + 테스트 양쪽, 컬럼 구성 조회 + 크롤 dispatch 200)
 - 공고 상세 페이지 (동적 라우트 `[boardId]`) — 이게 생기면 알림 URL 빌더(`buildNotificationPayload`·`buildEmailPayload`)를 soco `view.do`에서 내부 상세로 교체할 수 있다(9-c 주석에 명시된 교체 지점). 렌더할 날짜는 `postDate`·`applicationDate` 둘뿐이다(ADR 014 — 마감일·발표일은 타입에서 제거됨)
 - 위 화면 확정 후 UI 디자인 일괄 작업 (v0/Lovable 등)
 
