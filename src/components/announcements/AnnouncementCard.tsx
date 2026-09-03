@@ -1,10 +1,12 @@
+import Link from 'next/link';
+
+import { buildAnnouncementPath } from '@/constants/announcements';
 import {
   ANNOUNCEMENT_TYPE_LABEL,
   RECRUITMENT_TYPE_LABEL,
   formatApplicationDate,
   formatDate,
 } from '@/lib/announcements/formatAnnouncement';
-import { buildAnnouncementUrl } from '@/lib/push/buildNotificationPayload';
 import type { AnnouncementSummary } from '@/types/announcement';
 
 /**
@@ -12,12 +14,13 @@ import type { AnnouncementSummary } from '@/types/announcement';
  *
  * 서버 컴포넌트 — 표시 전용이라 상태도 이벤트 핸들러도 없다.
  *
- * 링크는 soco 원문(view.do)으로 내보낸다. 내부 상세 페이지(`/announcements/[boardId]`)가
- * 아직 없기 때문이며, 생기는 시점에 알림 URL 빌더(buildNotificationPayload·
- * buildEmailPayload)와 함께 한 번에 내부 경로로 교체한다 — 지금은 알림이 보내는
- * 링크와 목록이 거는 링크가 같은 곳을 가리키게 두는 편이 일관적이다.
+ * 링크는 내부 상세 페이지(`/announcements/[boardId]`)로 보낸다 (#96). 알림 URL
+ * 빌더(buildNotificationPayload·buildEmailPayload)도 같은 시점에 내부 경로로
+ * 교체했다 — 알림이 보내는 링크와 목록이 거는 링크가 같은 곳을 가리켜야 한다는
+ * 9-c 시점의 판단을 지킨 것이다. 경로 문자열은 `buildAnnouncementPath`로 공유한다.
  *
- * 외부로 나가므로 target="_blank" + rel="noreferrer"를 붙인다.
+ * 내부 이동이라 `next/link`를 쓰고 target="_blank"는 붙이지 않는다 — 클라이언트
+ * 사이드 내비게이션과 프리페치를 받는다.
  *
  * 스타일은 흐름 검증 수준의 최소 형태다. 실제 디자인은 Sprint 2 화면이 모두
  * 잡힌 뒤 일괄 작업한다(/subscribe와 동일한 방침).
@@ -43,10 +46,8 @@ export function AnnouncementCard({
 
   return (
     <li className="rounded-lg border border-zinc-200 transition-colors hover:border-zinc-400">
-      <a
-        href={buildAnnouncementUrl(boardId)}
-        target="_blank"
-        rel="noreferrer"
+      <Link
+        href={buildAnnouncementPath(boardId)}
         className="flex flex-col gap-2 p-4"
       >
         <div className="flex gap-2 text-xs">
@@ -76,7 +77,7 @@ export function AnnouncementCard({
             <dd>{formatDate(postDate)}</dd>
           </div>
         </dl>
-      </a>
+      </Link>
     </li>
   );
 }
