@@ -13,7 +13,7 @@
 
 **단, Sprint 2 항목은 3개 남았다** — #86(파서 날짜 매핑, 잠복) / 공고 상세 페이지 / UI 디자인 일괄 작업. 마일스톤(MVP 경로)은 달성했지만 Sprint 종료는 아니므로 **회고는 잔여 3건 완료 후**에 쓴다(지금 쓰면 미완 항목이 그대로 남아 종료 시점에 또 써야 한다).
 
-**다음 작업 순서**(의존 관계상): ① `'use cache: remote'` 캐시 적중 확인(프로덕션 — 방금 배포된 지금이 가장 싸다) → ② **#86** → ③ 상세 페이지 → ④ UI 디자인 → ⑤ 회고. **#86이 상세 페이지보다 앞인 이유**: #86의 결론(매핑만 정정 / 필드명까지 / 없는 필드 `applicationEndDate`·`resultDate` 제거)이 **상세 페이지가 렌더할 필드 목록을 결정**한다. 순서를 뒤집으면 Step b에서 카드가 전부 `~ 미정`으로 나왔던 판단을 상세 페이지에서 한 번 더 반복하게 된다. 상세 페이지를 먼저 하고 싶다면 그 두 필드를 **아예 렌더하지 않는 것**으로 시작하면 충돌하지 않는다(`parseDetailPage`가 항상 null을 반환하므로 사실에 부합).
+**다음 작업 순서**(의존 관계상): ~~① `'use cache: remote'` 캐시 적중 확인~~(2026-09-02 완료 — 위 c-2 문단) → **① #86** → ② 상세 페이지 → ③ UI 디자인 → ④ 회고. **#86이 상세 페이지보다 앞인 이유**: #86의 결론(매핑만 정정 / 필드명까지 / 없는 필드 `applicationEndDate`·`resultDate` 제거)이 **상세 페이지가 렌더할 필드 목록을 결정**한다. 순서를 뒤집으면 Step b에서 카드가 전부 `~ 미정`으로 나왔던 판단을 상세 페이지에서 한 번 더 반복하게 된다. 상세 페이지를 먼저 하고 싶다면 그 두 필드를 **아예 렌더하지 않는 것**으로 시작하면 충돌하지 않는다(`parseDetailPage`가 항상 null을 반환하므로 사실에 부합).
 
 **Step c-3 완료·머지**(PR #91, 2026-09-02) **— 필터 UI**. 공고 유형·모집 구분을 URL 쿼리(`?type=`·`?recruitment=`)로 걸고, `AnnouncementFilterBar`(서버 컴포넌트 + 링크, JS 0)로 노출한다. 파싱은 `src/lib/announcements/parseListParams.ts`로 분리해 테스트를 붙였다(`parsePageParam`도 c-2의 페이지 파일에서 여기로 이동) — 공개 쿼리스트링은 누구나 바꿀 수 있어 "잘못된 입력을 어떻게 다루는가"가 곧 방어선이고, 원칙은 **모르는 값은 무시**(제약 없음으로 취급, 400·500 아님)다. enum이라 화이트리스트로 닫아 검증하고 배열로 온 값은 첫 값만 쓴다. **필터 변경 시 `page`를 버리고, 페이지 이동 시 필터는 유지한다**(`baseParams`) — 전자를 유지하면 4페이지에서 필터를 걸었을 때 빈 화면이 뜬다. 빈 목록 문구는 셋으로 갈랐다(조건 불일치 / 페이지 범위 초과 / 진짜 0건 — 사용자가 취할 행동이 각각 다르다). 유닛 261 → 294. 학습 문서·ADR 없음 — c-2 패턴의 적용이고 ADR 013이 이미 "c-3은 인자 추가로 끝난다"까지 적어뒀다. 프로덕션 스모크로 집계 정합 확인(공공 1 + 민간 68 = 69, 최초 13 + 추가 56 = 69).
 
@@ -21,7 +21,7 @@
 
 **Step c-2 완료·머지**(PR #90, 2026-09-02) **— 렌더링 모델을 Cache Components로 전환**. `searchParams`는 request-time API라 읽는 순간 라우트 전체가 동적이 되어 **Step b의 ISR과 양립하지 않는다**(조회가 `fetch`가 아니라 Data Cache 폴백도 없음). `cacheComponents: true`로 켜고, 페이지는 async가 아니게 두어 `searchParams` promise를 Suspense 하위로 내려보내며, 조회는 `'use cache: remote'` + `cacheLife('hours')` + `cacheTag(ANNOUNCEMENTS_CACHE_TAG)`로 감쌌다. cron은 `revalidatePath` → **`revalidateTag(tag, { expire: 0 })`**. 근거·선택지·배제한 접근은 **ADR 013**이 단일 출처, 보편 패턴은 `docs/learning/step83-cache-components.md`(선행 `step83-isr.md`는 §2·§5가 무효가 되어 상단에 포인터만 붙이고 내용은 박제). 페이지네이션 UI는 `AnnouncementPagination`(서버 컴포넌트, 1페이지는 `?page=1`을 붙이지 않음). 브라우저 검증: 69건 → 4페이지, `?page=999` → 빈 페이지 안내, `?page=abc` → 1페이지.
 
-**c-2에서 코드 읽기로 세운 추정 2건이 빌드로 뒤집혔다**(같은 실수 반복 방지): ① `force-dynamic`이 붙은 API 라우트 3개는 "opt-out이라 영향 없음"이 아니라 **`cacheComponents`와 비호환이라 제거 대상**이었다(cron은 `request.headers` 접근으로 동적 실행이 보장되므로 제거해도 안전). ② **Step b의 자격 증명 가드는 근거가 소멸해 제거했다** — PPR에서 목록 조회는 `searchParams` 뒤에 있어 빌드 시점 프리렌더가 아예 호출하지 않는다(env 없는 빌드에서 경고 로그 미출력으로 확인). 근거 없는 가드를 남기면 자격 증명이 빠진 배포가 에러 대신 "공고 없음"으로 위장된다. **미검증 1건**: remote 캐시 핸들러를 Vercel이 자동 제공한다는 것은 문서 서술 의존 — 프리뷰/프로덕션에서 적중 확인 필요(적중 실패해도 기능은 정상, 매 요청 DB 조회로 퇴화).
+**c-2에서 코드 읽기로 세운 추정 2건이 빌드로 뒤집혔다**(같은 실수 반복 방지): ① `force-dynamic`이 붙은 API 라우트 3개는 "opt-out이라 영향 없음"이 아니라 **`cacheComponents`와 비호환이라 제거 대상**이었다(cron은 `request.headers` 접근으로 동적 실행이 보장되므로 제거해도 안전). ② **Step b의 자격 증명 가드는 근거가 소멸해 제거했다** — PPR에서 목록 조회는 `searchParams` 뒤에 있어 빌드 시점 프리렌더가 아예 호출하지 않는다(env 없는 빌드에서 경고 로그 미출력으로 확인). 근거 없는 가드를 남기면 자격 증명이 빠진 배포가 에러 대신 "공고 없음"으로 위장된다. **미검증이던 remote 캐시 적중은 2026-09-02 프로덕션에서 확인됐다** — 웜 0.33~0.37s vs 콜드 최대 1.0s, 콜드 키의 두 번째 요청이 웜 수준으로 하락. 웜/콜드 교차 요청으로 람다 웜업을, 1페이지 고정으로 fallback count를 각각 상쇄했다. 측정 절차와 한계(헤더 노출이 없어 타이밍 추론)는 ADR 013 "캐시 적중 검증".
 
 **c-2에서 CI가 한 번 빨개졌다 — 로컬에서 재현되지 않는 종류였다.** `PageProps<'/announcements'>` 전역 헬퍼는 `next dev`·`next build`·`next typegen`이 `.next/types`에 **생성**하는 타입인데, CI는 typecheck를 build보다 먼저 돌린다(lint → format → typecheck → test → build). 로컬은 이미 빌드해서 `.next/types`가 남아 있어 통과했다. `searchParams` 타입을 파일 안에 직접 정의해 생성 타입 의존을 제거했고(PR #90의 `2bc6dfa`), **검증도 CI 조건으로 한다: `rm -rf .next && npx tsc --noEmit`.** 생성 타입(`PageProps`·`LayoutProps`·`RouteContext`)을 새로 쓸 때 같은 함정을 밟으므로 주의.
 
@@ -139,7 +139,7 @@ Sprint 2 1번 작업(웹 푸시 파이프라인, #39)을 Step(9-a~d)으로 쪼�
 
 - ~~이메일 알림 (#65, ADR 011)~~: **완결·이슈 닫음**(2026-08-28, a→b-1→b-2→c 전부 머지 — 위 "✅ 완료" 섹션). 실발송 수동 스모크만 도메인 검증 시점으로 연기(크롤 트리거 → `notifications.email` 확인, 절차는 `learning/step65-resend` §4의 제약 참고)
 - ~~크롤 파서 row 격리 (#72, ADR 012)~~: **완결·이슈 닫음**(2026-08-31, PR #81 — 위 "✅ 완료" 섹션)
-- ~~공고 목록 페이지 (#83)~~: **완결·이슈 닫음**(2026-09-02, Step a→b→c-1→c-2→c-3 전부 머지 — 위 "✅ 완료" 섹션). 미검증 이월 1건: `'use cache: remote'` 캐시 적중을 프로덕션에서 확인해야 한다(ADR 013 "결과")
+- ~~공고 목록 페이지 (#83)~~: **완결·이슈 닫음**(2026-09-02, Step a→b→c-1→c-2→c-3 전부 머지 — 위 "✅ 완료" 섹션). 이월 항목이던 `'use cache: remote'` 캐시 적중도 프로덕션에서 확인 완료(ADR 013 "캐시 적중 검증")
 - 파서 날짜 매핑 정정 (#86) — `parseListJson`이 `optn1`(공고게시일)·`optn4`(청약신청일)를 `applicationStartDate`/`applicationEndDate`로 잘못 매핑. 저장 경로가 detail만 쓰므로 잠복 상태로 운영 영향 없음. 매핑 정정만 / 필드명까지 / 없는 필드(`applicationEndDate`·`resultDate`) 제거 3단계 중 어디까지 갈지는 스키마 변경 판단 필요 — 2·3안은 ADR 대상 가능
 - 공고 상세 페이지 (동적 라우트 `[boardId]`) — 이게 생기면 알림 URL 빌더(`buildNotificationPayload`·`buildEmailPayload`)를 soco `view.do`에서 내부 상세로 교체할 수 있다(9-c 주석에 명시된 교체 지점)
 - 위 화면 확정 후 UI 디자인 일괄 작업 (v0/Lovable 등)
