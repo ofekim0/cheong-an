@@ -8,6 +8,7 @@ import {
   ANNOUNCEMENTS_CACHE_TAG,
   ANNOUNCEMENTS_PATH,
 } from '@/constants/announcements';
+import { buildSourceUrl } from '@/lib/announcements/announcementUrl';
 import {
   ANNOUNCEMENT_TYPE_LABEL,
   RECRUITMENT_TYPE_LABEL,
@@ -186,6 +187,23 @@ async function AnnouncementDetailView({ params }: { params: DetailParams }) {
         */}
         <p className="text-sm leading-relaxed break-words whitespace-pre-wrap text-zinc-800">
           {rawContent}
+        </p>
+
+        {/*
+          원본으로 나가는 문. 첨부 유무와 무관하게 항상 노출한다 (#98) —
+          attachment_url이 null인 공고는 이 링크가 없으면 원본에 닿을 경로가
+          아예 없어진다. 무엇을 얻으러 가는지 함께 밝혀 클릭 이유를 남긴다.
+        */}
+        <p className="text-sm text-zinc-500">
+          원문에는 표·이미지 등 서식이 포함돼 있습니다.{' '}
+          <a
+            href={buildSourceUrl(boardId)}
+            target="_blank"
+            rel="noreferrer"
+            className="text-blue-700 underline"
+          >
+            원본 공고 보기 ↗
+          </a>
         </p>
       </section>
     </article>
