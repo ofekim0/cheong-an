@@ -19,8 +19,8 @@ describe('parsePageParam', () => {
     expect(parsePageParam('999')).toBe(999);
   });
 
-  // listAnnouncements가 RangeError를 던지는 입력들. 공개 쿼리스트링이 500이
-  // 되어선 안 되므로 조회 전에 여기서 1로 정규화한다.
+  // paginate가 RangeError를 던지는 입력들. 공개 쿼리스트링이 예외가 되어선
+  // 안 되므로 선택 전에 여기서 1로 정규화한다.
   it.each(['0', '-1', '1.5', 'abc', '', ' ', 'NaN', 'Infinity'])(
     'page=%s는 1페이지로 정규화한다',
     (raw) => {

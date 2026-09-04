@@ -81,8 +81,8 @@ function firstValue(raw: ParamValue): string | undefined {
 /**
  * `?page=` 값을 1 이상의 정수로 정규화한다.
  *
- * `listAnnouncements`는 비정수·1 미만 page에 `RangeError`를 던지는 계약이므로
- * 조회 전에 여기서 걸러야 한다. 잘못된 값은 첫 페이지로 본다.
+ * `paginate`(filterAnnouncements)는 비정수·1 미만 page에 `RangeError`를 던지는
+ * 계약이므로 선택 전에 여기서 걸러야 한다. 잘못된 값은 첫 페이지로 본다.
  */
 export function parsePageParam(raw: ParamValue): number {
   const value = firstValue(raw);
@@ -98,7 +98,7 @@ export function parsePageParam(raw: ParamValue): number {
  * 쿼리에서 필터를 뽑는다. 허용 목록에 없는 값은 그 차원을 지정하지 않은 것으로 본다.
  *
  * 지정되지 않은 차원은 키를 아예 넣지 않는다 — `{ announcementType: undefined }`도
- * 리포지토리가 제약 없음으로 처리하지만(`applyFilters`), 키가 없는 편이 캐시 키와
+ * `filterAnnouncements`가 제약 없음으로 처리하지만, 키가 없는 편이 `toEqual` 비교와
  * 로그에서 읽기 쉽다.
  */
 export function parseAnnouncementFilters(params: {
