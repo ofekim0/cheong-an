@@ -1,6 +1,6 @@
-import Link from 'next/link';
-
+import { ListLink } from '@/components/announcements/ListLink';
 import { ANNOUNCEMENTS_PATH } from '@/constants/announcements';
+import type { AnnouncementFilters } from '@/lib/announcements/filterAnnouncements';
 import {
   ANNOUNCEMENT_TYPE_LABEL,
   RECRUITMENT_TYPE_LABEL,
@@ -10,13 +10,14 @@ import {
   RECRUITMENT_PARAM,
   TYPE_PARAM,
 } from '@/lib/announcements/parseListParams';
-import type { AnnouncementFilters } from '@/lib/supabase/announcementsRepository';
 
 /**
- * 공고 목록 필터 (#83, Step c-3).
+ * 공고 목록 필터 (#83, Step c-3 → #106).
  *
- * 서버 컴포넌트 — 선택이 전부 URL 링크다. 클라이언트 상태도 JS도 없고, 필터가
- * 걸린 화면이 공유·북마크 가능한 주소를 가진다.
+ * 선택이 전부 URL 링크다. 상태를 따로 두지 않아 필터가 걸린 화면이 공유·북마크
+ * 가능한 주소를 가진다. 링크는 `ListLink`라 클릭 시 `pushState`로 URL만 바뀌고
+ * 서버 요청은 없다(ADR 015) — 어느 칩이 선택됐는지는 부모(`AnnouncementList`)가
+ * URL에서 읽어 `filters`로 넘긴다.
  *
  * **필터를 바꾸면 page를 버린다.** 4페이지를 보던 중 필터를 걸면 결과가 1페이지
  * 뿐일 수 있는데, page를 유지하면 "이 페이지에는 공고가 없습니다"가 뜬다.
@@ -117,12 +118,12 @@ function FilterGroup({
                   {option.label}
                 </span>
               ) : (
-                <Link
+                <ListLink
                   href={hrefFor(param, option.value)}
                   className="rounded-full border border-zinc-200 px-3 py-1 text-sm text-zinc-700 hover:bg-zinc-100"
                 >
                   {option.label}
-                </Link>
+                </ListLink>
               )}
             </li>
           );

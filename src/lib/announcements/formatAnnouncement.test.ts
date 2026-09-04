@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest';
 
 import {
   ANNOUNCEMENT_TYPE_LABEL,
-  RECRUITMENT_TYPE_LABEL,
   formatApplicationDate,
   formatDate,
+  listCountLabel,
+  listEmptyMessage,
+  RECRUITMENT_TYPE_LABEL,
 } from './formatAnnouncement';
 
 describe('라벨 맵', () => {
@@ -49,5 +51,31 @@ describe('formatApplicationDate', () => {
   it('값이 없으면 미정으로 표기한다', () => {
     // 원본에 마감일 항목 자체가 없으므로 '○○ ~ 미정' 같은 기간 표기를 쓰지 않는다.
     expect(formatApplicationDate(null)).toBe('미정');
+  });
+});
+
+describe('listEmptyMessage', () => {
+  // 세 문구는 사용자가 취할 행동이 다르다: 기다리기 / 필터 풀기 / 앞 페이지로.
+  it('전체 0건·필터 없음 → 아직 등록된 공고 없음', () => {
+    expect(listEmptyMessage(0, false)).toBe('아직 등록된 공고가 없습니다.');
+  });
+
+  it('전체 0건·필터 있음 → 조건에 맞는 공고 없음', () => {
+    expect(listEmptyMessage(0, true)).toBe('조건에 맞는 공고가 없습니다.');
+  });
+
+  it('전체는 있는데 이 페이지가 비면 → 범위 초과 안내 (필터 유무 무관)', () => {
+    expect(listEmptyMessage(68, false)).toBe('이 페이지에는 공고가 없습니다.');
+    expect(listEmptyMessage(3, true)).toBe('이 페이지에는 공고가 없습니다.');
+  });
+});
+
+describe('listCountLabel', () => {
+  it('필터가 없으면 전체 건수', () => {
+    expect(listCountLabel(69, false)).toBe('전체 69건');
+  });
+
+  it('필터가 있으면 조건에 맞는 건수', () => {
+    expect(listCountLabel(13, true)).toBe('조건에 맞는 공고 13건');
   });
 });

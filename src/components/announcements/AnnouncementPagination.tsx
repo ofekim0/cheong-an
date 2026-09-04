@@ -1,12 +1,13 @@
-import Link from 'next/link';
-
+import { ListLink } from '@/components/announcements/ListLink';
 import { ANNOUNCEMENTS_PATH } from '@/constants/announcements';
 
 /**
- * 공고 목록 페이지네이션 (#83, Step c-2).
+ * 공고 목록 페이지네이션 (#83, Step c-2 → #106).
  *
- * 서버 컴포넌트 — 이동이 전부 URL 링크라 클라이언트 상태가 없다. 덕분에 각 페이지가
- * 공유·북마크 가능한 주소를 가지고, 뒤로 가기가 그대로 동작한다.
+ * 이동이 전부 URL 링크라 상태가 없다. 덕분에 각 페이지가 공유·북마크 가능한 주소를
+ * 가지고, 뒤로 가기가 그대로 동작한다. 링크는 `ListLink`라 클릭 시 `pushState`로
+ * URL만 바뀌고 서버 요청은 없다(ADR 015). 페이지를 옮기면 맨 위로 스크롤한다 —
+ * 목록 하단에서 눌렀는데 새 페이지의 하단이 보이면 이동한 것처럼 느껴지지 않는다.
  *
  * 1페이지는 `?page=1`을 붙이지 않는다. 같은 내용이 두 주소(`/announcements`와
  * `?page=1`)로 갈리면 캐시 항목도 둘로 나뉘고 canonical URL도 모호해진다.
@@ -44,13 +45,14 @@ export function AnnouncementPagination({
       <ul className="flex items-center gap-1">
         <li>
           {currentPage > 1 ? (
-            <Link
+            <ListLink
+              scrollToTop
               href={hrefForPage(currentPage - 1)}
               rel="prev"
               className="rounded px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-100"
             >
               이전
-            </Link>
+            </ListLink>
           ) : (
             <span
               aria-hidden="true"
@@ -71,25 +73,27 @@ export function AnnouncementPagination({
                 {page}
               </span>
             ) : (
-              <Link
+              <ListLink
+                scrollToTop
                 href={hrefForPage(page)}
                 className="rounded px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-100"
               >
                 {page}
-              </Link>
+              </ListLink>
             )}
           </li>
         ))}
 
         <li>
           {currentPage < totalPages ? (
-            <Link
+            <ListLink
+              scrollToTop
               href={hrefForPage(currentPage + 1)}
               rel="next"
               className="rounded px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-100"
             >
               다음
-            </Link>
+            </ListLink>
           ) : (
             <span
               aria-hidden="true"
