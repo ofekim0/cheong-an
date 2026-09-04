@@ -7,7 +7,9 @@
 
 ## 0. 최신 상태 (2026-09-04 기준)
 
-### 🔄 진행 중 — 목록 데이터 전달 모델 전환 (#106, ADR 015) — Step a·b 머지, Step c 작업 중
+### ✅ 완료 — 목록 데이터 전달 모델 전환 (#106, ADR 015, 2026-09-04 이슈 닫음)
+
+**Step a**(PR #107) **· b**(PR #108) **· c**(PR #109) 전부 머지. 유닛 310 → 348 → 353 → **330**(Step c에서 구 서버 목록 조회 테스트 23건 삭제). 결과: 필터·페이지 클릭 서버 요청 **0건**(전 0.33~1.0s 왕복), `/announcements` 빌드 기호 `◐` → `○`, 목록 캐시 항목 조합 수 → 1건, Vercel Preview가 프로덕션 DB 대신 테스트 프로젝트를 봄. 프로덕션 첫 바이트 0.13~0.15s(CDN HIT). 배포 직후 첫 요청 1회는 shell 재생성으로 ~1s.
 
 **배경**: 필터(공공/민간·최초/추가)·페이지 클릭이 체감상 느렸다. 원인은 세 겹 — ① 필터 바가 Suspense 안 서버 컴포넌트라 선택 칩 상태조차 서버 응답으로 옴(transition이 기존 화면 유지 → 클릭이 씹힌 것처럼 보임), ② 목록이 `searchParams` 뒤에 있어 클릭마다 서버 왕복 필수(prefetch는 shell만 받아 무력), ③ 왕복이 히트여도 0.33~0.37s·콜드 1.0s(ADR 013 측정). **데이터는 크롤 주기로만 바뀌고 전체 77건(요약 20KB 안팎)** — 필터 조건마다 서버가 잘라 줄 이유가 없다. ADR 013 선택지 표에 "전량을 내려보내고 브라우저가 고른다" 축이 없었다(기각이 아니라 미검토).
 
@@ -19,7 +21,7 @@
 
 **Step b 완료·머지**(PR #108): `page.tsx`가 `searchParams`를 받지 않음(171줄 중 158줄 삭제), `AnnouncementList`(클라이언트, 분기 없음 — 전부 `lib` 호출), `ListLink`(수정키 없는 좌클릭만 `pushState`, `prefetch={false}`, 페이지네이션만 scrollToTop), 빈 목록 문구·건수 문구를 `formatAnnouncement`로 이동. **검증**: 빌드 기호 `◐` → **`○` Static**(Revalidate 1h·Expire 1d), 필터·페이지 클릭 5회 네트워크 요청 **각 0건**(Playwright 스크립트), 뒤로가기·직접 진입·Ctrl+클릭 정상. 유닛 348 → 353. **CI 빌드가 처음으로 DB를 읽게 되어 `ci.yml` Build에 `TEST_*` secrets 주입.** **Vercel Preview가 여기서 깨졌다** — Preview 환경에 서버용 두 변수가 없었고 `NEXT_PUBLIC_*`은 프로덕션 값으로 Preview에도 들어가 있었다(= Preview가 그동안 프로덕션 DB를 봄). 네 변수를 Preview 전용으로 `cheong-an-test` 값으로 추가해 해결(ADR 015 결과 절). 규칙: **프로덕션 아닌 모든 자동 실행(CI·E2E·Preview)은 테스트 프로젝트**. 함정: `NEXT_PUBLIC_` 변수를 Secret으로 저장하면 이후 편집 불가 → 삭제 후 Config로 재생성.
 
-**Step c(이 PR)**: 구 서버 조회 경로(`listAnnouncements`·`countAnnouncements`·`applyFilters`·`PGRST103`) 삭제, `AnnouncementFilters` re-export 제거, 태그 주석 근거 정정(constants·크롤 라우트), 필터 클릭 E2E(요청 0건 단언), 학습 문서 `step106-client-side-filtering.md`, `step83-cache-components.md` 포인터, ADR 015 결과 보강.
+**Step c 완료·머지**(PR #109): 구 서버 조회 경로(`listAnnouncements`·`countAnnouncements`·`applyFilters`·`PGRST103`) 삭제, `AnnouncementFilters` re-export 제거, 태그 주석 근거 정정(constants·크롤 라우트 — "쿼리 조합마다"에서 "목록 1건 + 상세 boardId별"로), 필터 클릭 E2E(document·fetch·xhr 요청 0건 단언, 시드 공유로 `serial` 모드 — `sendChannels.spec.ts`와 같은 이유), 학습 문서 **`step106-client-side-filtering.md`**(보편 패턴: 지연 3겹 진단 / request-time 값을 읽지 않는 조건 / 순수 함수 분리 / `href` + `pushState` / 요청 0건 검증 / 빌드의 DB 의존과 Preview env 함정 / 크기 상한), `step83-cache-components.md` 포인터, ADR 015 결과 보강(프로덕션 실측 + Vercel Preview env 사건). **다음 단계(청크 분할 + TanStack Query)는 ADR 015 성장 트리거(첫 로드 압축 후 50KB / 클릭 100ms)가 깨질 때** — TanStack Query 첫 소비자는 "브라우저의 첫 직접 fetch"(열어둔 탭 백그라운드 리프레시 또는 청크 지연 로드)이고, 그 시점에 ADR로 기록한다.
 
 **공공 공고 1건 확인(2026-09-04)**: "public 공고가 사라졌다"는 의문에 세 지점(프로덕션 DB·배포 페이지·원본 soco 목록 12페이지)을 대조 — 전부 6624 1건으로 일치. 원본도 최근 120건 중 공공 1건(SH 공공임대는 연 1~2회 일괄 공고). 부트스트랩 시작(6562, 06-11) 이전의 1차 공고는 수집 범위 밖(ADR 005). 결함 아님.
 
@@ -55,9 +57,9 @@
 
 **MVP 경로가 연결됐다: 새 공고 → 크롤링 감지 → 구독자 알림 → 웹에서 확인.** Step a(조회 리포지토리, PR #84)·b(목록 페이지 셸, PR #87)·c-1(리포지토리 필터, PR #89)·c-2(렌더링 모델 + 페이지네이션, PR #90)·c-3(필터 UI, PR #91) 전부 머지. 유닛 243 → **294**.
 
-**Sprint 2 잔여는 UI 디자인 일괄 작업 1건이다.** 마일스톤(MVP 경로)은 달성했지만 Sprint 종료는 아니므로 **회고는 잔여 완료 후**에 쓴다. 다만 이와 별개로 **ADR 015(목록 데이터 전달 모델 전환)가 진행 중**이니, Sprint 2 종료 시점은 그 작업의 편입 여부에 따라 정한다.
+**Sprint 2 잔여는 UI 디자인 일괄 작업 1건이다.** 마일스톤(MVP 경로)은 달성했지만 Sprint 종료는 아니므로 **회고는 잔여 완료 후**에 쓴다. ADR 015(목록 데이터 전달 모델 전환, #106)는 2026-09-04 완료됐다 — Sprint 2 편입 여부는 회고 작성 시 정리한다(계획에 없던 성능 작업이 Sprint 중간에 들어온 경위 포함).
 
-**다음 작업 순서**: ~~① `'use cache: remote'` 캐시 적중 확인~~(2026-09-02 완료) → ~~① #86~~(2026-09-03 완료) → ~~① 상세 페이지~~(2026-09-04 완료 — 위 #96·#98 섹션) → **① #106 Step c 머지**(위 진행 중 섹션) → ② UI 디자인 → ③ 회고.
+**다음 작업 순서**: ~~① `'use cache: remote'` 캐시 적중 확인~~(2026-09-02 완료) → ~~① #86~~(2026-09-03 완료) → ~~① 상세 페이지~~(2026-09-04 완료 — 위 #96·#98 섹션) → ~~① #106 Step c 머지~~(2026-09-04 완료 — 위 #106 섹션) → **① UI 디자인**(착수 시 Issue 생성) → ② 회고.
 
 **열려 있는 후속 이슈 3건**(전부 진행을 막지 않음, 착수 시점 미정). ~~#101~~은 PR #105로 닫혔다.
 
