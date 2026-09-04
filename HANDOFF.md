@@ -5,7 +5,21 @@
 
 ---
 
-## 0. 최신 상태 (2026-09-03 기준)
+## 0. 최신 상태 (2026-09-04 기준)
+
+### ✅ 완료 — 공고 상세 페이지 + 링크 내부 일원화 (#96·#98, 2026-09-04 이슈 닫음)
+
+**#96**(상세 페이지 + URL 일원화, PR #97) **· #98**(원본 공고 링크, PR #99) 머지. 유닛 294 → **310**.
+
+**`/announcements/[boardId]`가 생겼다.** `getAnnouncementByBoardId`(없으면 null — 공개 경로는 임의로 바뀔 수 있어 500이 되면 안 된다)로 조회하고, 목록과 달리 컬럼을 고르지 않는다(1건이고 `raw_content`가 렌더 대상 본문 그 자체). **`AnnouncementRow` 타입이 이 시점에 처음 소비자를 얻었다.** 렌더링 모델은 목록과 같은 PPR — `params`를 Suspense 하위에서 읽어 빌드 출력 `◐`를 확인했고, `generateStaticParams`는 쓰지 않는다(공고가 계속 추가돼 프리렌더 집합이 곧 낡는다). 캐시 태그는 목록과 공유한다(boardId별 태그를 배제한 근거는 page.tsx 주석).
+
+**알림·목록 링크를 내부 상세로 일원화했다.** 9-c 주석이 "상세 페이지가 생기면 알림 URL 빌더와 **함께 한 번에** 교체한다"고 판단을 남겨뒀기에 Step 분할 없이 한 PR로 갔다. 빌더는 `lib/announcements/announcementUrl`로 신설 — `lib/push`가 아닌 이유는 이메일도 쓰기 때문이고, 기존에 `buildEmailPayload`가 `lib/push/`에서 가져와 **채널 간 방향이 어긋나 있었다**. 절대 URL 출처는 **`NEXT_PUBLIC_SITE_URL`**(미설정 시 throw — 폴백은 설정 누락을 위장한다는 ADR 013 판단을 따름). `ChannelAdapter` 계약(ADR 011 축2)은 무변경 — env를 빌더가 직접 읽어 origin을 어댑터로 관통시킬 필요가 없었다.
+
+**#98은 #96이 지불한 대가를 보완한다.** 상세 본문은 `parseDetailPage`가 `.text()`로 뽑은 **평문**이라 원본의 표·이미지·서식이 없다. 첨부 PDF가 있으면 우회되지만 `attachment_url`이 null인 공고는 원본에 닿을 경로가 **아예 없어진다** — 그래서 "원본 공고 보기" 링크를 첨부 유무와 무관하게 항상 노출한다. `buildSourceUrl`은 `getSiteUrl()`을 타지 않는다(원본 URL은 배포 도메인과 무관하며, 여기서 env를 읽으면 설정 누락이 페이지 렌더까지 깨뜨린다).
+
+**⚠️ `NEXT_PUBLIC_SITE_URL` 동작은 아직 미검증이다.** Vercel 등록·재배포는 완료(Type은 `Config` — `NEXT_PUBLIC_` 접두사 값은 Secret으로 저장 불가). 다만 알림 코드는 **신규 공고가 있을 때만** 실행되므로(`newCount: 0`이면 어댑터가 대상 조회 없이 no-op) 배포 후 아직 한 번도 타지 않았다. **다음에 새 공고가 온 회차의 크롤 응답 본문**으로 확인한다 — 정상이면 `notifications.web_push.sent`, 미설정이면 `notifications.web_push.error`. 크롤은 어느 쪽이든 200이라 응답을 봐야 갈린다.
+
+**프로덕션 스모크(2026-09-04, curl)**: 목록 200 + 내부 상세 링크(soco로 나가지 않음), 상세 200 + 원본 링크 + 첨부 링크 + 본문 `whitespace-pre-wrap` 확인. **여기서 결함 하나를 발견해 #100으로 분리했다** — 없는 boardId(`/announcements/999999`)가 **화면은 not-found인데 HTTP 상태는 200**이다(soft 404). PPR이 static shell과 함께 상태 코드를 먼저 내보내므로 Suspense 안쪽의 `notFound()`가 이를 바꿀 수 없다. 사람 방문자에게는 영향이 없고 검색엔진·링크 체커만 오인한다. 고치려면 `params`를 Suspense 밖으로 꺼내야 하는데 그 순간 static shell을 잃으므로(`◐` → `ƒ`) 현행 유지 + 기록 정정으로 두고 재검토 시점을 #100에 남겼다.
 
 ### ✅ 완료 — 공고 날짜 필드 정정 (#86, 2026-09-03 이슈 닫음)
 
@@ -25,9 +39,18 @@
 
 **MVP 경로가 연결됐다: 새 공고 → 크롤링 감지 → 구독자 알림 → 웹에서 확인.** Step a(조회 리포지토리, PR #84)·b(목록 페이지 셸, PR #87)·c-1(리포지토리 필터, PR #89)·c-2(렌더링 모델 + 페이지네이션, PR #90)·c-3(필터 UI, PR #91) 전부 머지. 유닛 243 → **294**.
 
-**단, Sprint 2 항목은 2개 남았다** — 공고 상세 페이지 / UI 디자인 일괄 작업. 마일스톤(MVP 경로)은 달성했지만 Sprint 종료는 아니므로 **회고는 잔여 2건 완료 후**에 쓴다(지금 쓰면 미완 항목이 그대로 남아 종료 시점에 또 써야 한다).
+**Sprint 2 잔여는 UI 디자인 일괄 작업 1건이다.** 마일스톤(MVP 경로)은 달성했지만 Sprint 종료는 아니므로 **회고는 잔여 완료 후**에 쓴다. 다만 이와 별개로 **ADR 015(목록 데이터 전달 모델 전환)가 진행 중**이니, Sprint 2 종료 시점은 그 작업의 편입 여부에 따라 정한다.
 
-**다음 작업 순서**(의존 관계상): ~~① `'use cache: remote'` 캐시 적중 확인~~(2026-09-02 완료 — 위 c-2 문단) → ~~① #86~~(2026-09-03 완료 — 위 #86 섹션) → **① 상세 페이지** → ② UI 디자인 → ③ 회고. #86을 상세 페이지보다 앞세운 이유는 **#86의 결론이 상세 페이지가 렌더할 필드 목록을 결정**하기 때문이었고, 그 결론이 나왔다 — 날짜는 `postDate`·`applicationDate` 둘뿐이다(ADR 014).
+**다음 작업 순서**: ~~① `'use cache: remote'` 캐시 적중 확인~~(2026-09-02 완료) → ~~① #86~~(2026-09-03 완료) → ~~① 상세 페이지~~(2026-09-04 완료 — 위 #96·#98 섹션) → **① UI 디자인** → ② 회고.
+
+**열려 있는 후속 이슈 4건**(전부 진행을 막지 않음, 착수 시점 미정):
+
+| 이슈 | 내용                                               | 성격                                               |
+| ---- | -------------------------------------------------- | -------------------------------------------------- |
+| #100 | 없는 공고 상세가 404 대신 200 (soft 404)           | PPR 구조의 대가. 고치면 static shell을 잃는다      |
+| #101 | 목록 → 상세 이동 E2E 없음                          | ADR 015가 목록을 바꾸기 전에 있으면 안전망이 된다  |
+| #102 | 크롤 스케줄이 설정(매시)과 달리 2~4시간 간격       | **서비스 전제와 어긋남**. 알림 지연이 곧 가치 손실 |
+| #103 | `NEXT_PUBLIC_SITE_URL` → `SITE_URL` (서버 전용 값) | 명명 정합성. 우선순위 낮음                         |
 
 **Step c-3 완료·머지**(PR #91, 2026-09-02) **— 필터 UI**. 공고 유형·모집 구분을 URL 쿼리(`?type=`·`?recruitment=`)로 걸고, `AnnouncementFilterBar`(서버 컴포넌트 + 링크, JS 0)로 노출한다. 파싱은 `src/lib/announcements/parseListParams.ts`로 분리해 테스트를 붙였다(`parsePageParam`도 c-2의 페이지 파일에서 여기로 이동) — 공개 쿼리스트링은 누구나 바꿀 수 있어 "잘못된 입력을 어떻게 다루는가"가 곧 방어선이고, 원칙은 **모르는 값은 무시**(제약 없음으로 취급, 400·500 아님)다. enum이라 화이트리스트로 닫아 검증하고 배열로 온 값은 첫 값만 쓴다. **필터 변경 시 `page`를 버리고, 페이지 이동 시 필터는 유지한다**(`baseParams`) — 전자를 유지하면 4페이지에서 필터를 걸었을 때 빈 화면이 뜬다. 빈 목록 문구는 셋으로 갈랐다(조건 불일치 / 페이지 범위 초과 / 진짜 0건 — 사용자가 취할 행동이 각각 다르다). 유닛 261 → 294. 학습 문서·ADR 없음 — c-2 패턴의 적용이고 ADR 013이 이미 "c-3은 인자 추가로 끝난다"까지 적어뒀다. 프로덕션 스모크로 집계 정합 확인(공공 1 + 민간 68 = 69, 최초 13 + 추가 56 = 69).
 
@@ -39,7 +62,7 @@
 
 **c-2에서 CI가 한 번 빨개졌다 — 로컬에서 재현되지 않는 종류였다.** `PageProps<'/announcements'>` 전역 헬퍼는 `next dev`·`next build`·`next typegen`이 `.next/types`에 **생성**하는 타입인데, CI는 typecheck를 build보다 먼저 돌린다(lint → format → typecheck → test → build). 로컬은 이미 빌드해서 `.next/types`가 남아 있어 통과했다. `searchParams` 타입을 파일 안에 직접 정의해 생성 타입 의존을 제거했고(PR #90의 `2bc6dfa`), **검증도 CI 조건으로 한다: `rm -rf .next && npx tsc --noEmit`.** 생성 타입(`PageProps`·`LayoutProps`·`RouteContext`)을 새로 쓸 때 같은 함정을 밟으므로 주의.
 
-**Step b 완료·머지**(PR #87, 2026-09-01): `/announcements`가 비로그인으로 최신순 20건을 렌더한다. `formatAnnouncement`(표시용 순수 함수 — 라벨 맵·날짜, 날짜는 `Date` 파싱 없이 문자열로 다룸: DB가 DATE라 UTC 자정 해석으로 렌더 환경 타임존에 따라 하루가 밀린다) + `AnnouncementCard`(표시 전용 서버 컴포넌트, 링크는 알림과 동일한 soco `view.do` — 상세 라우트 생기면 URL 빌더만 교체) + 페이지 라우트 + 홈 링크. 유닛 243 → 254. 학습 문서 **작성 완료**(`docs/learning/step83-isr.md`).
+**Step b 완료·머지**(PR #87, 2026-09-01): `/announcements`가 비로그인으로 최신순 20건을 렌더한다. `formatAnnouncement`(표시용 순수 함수 — 라벨 맵·날짜, 날짜는 `Date` 파싱 없이 문자열로 다룸: DB가 DATE라 UTC 자정 해석으로 렌더 환경 타임존에 따라 하루가 밀린다) + `AnnouncementCard`(표시 전용 서버 컴포넌트, 링크는 알림과 동일한 soco `view.do` — 상세 라우트 생기면 URL 빌더만 교체) + 페이지 라우트 + 홈 링크. 유닛 243 → 254. 학습 문서 **작성 완료**(`docs/learning/step83-isr.md`). **※ 카드 링크는 #96(2026-09-04)에서 내부 상세로 교체됨** — 지금 이 컴포넌트는 `next/link` + `buildAnnouncementPath`를 쓴다.
 
 **⚠️ 아래 두 문단은 c-2가 대체했다 — 되살리지 말 것** (경위는 ADR 013 "배제한 접근"):
 
@@ -52,7 +75,7 @@
 
 **Step a 리포지토리 계약 2가지**(Step b가 이어받았고 Step c도 그대로 쓴다): ① `listAnnouncements(client, { page, pageSize }) → { items, total }`, ② **범위를 벗어난 page는 throw가 아니라 빈 페이지 + 실제 total**이므로 404·리다이렉트 판단은 호출자 몫이다(PostgREST가 offset 초과에 빈 배열이 아닌 `PGRST103`/HTTP 416을 반환하는 것을 리포지토리가 흡수). 정렬은 `post_date DESC, board_id DESC` — `post_date`가 DATE(일 단위)라 실 데이터 68건 중 최소 10개 날짜가 중복이고, 동률을 남기면 페이지 경계 row가 누락·중복된다.
 
-**이슈 정리**(2026-08-31): 완료됐는데 열려 있던 #6(Vercel 연동)·#39(웹 푸시)·#42(크롤 동결)·#50(소셜 로그인)을 근거 코멘트와 함께 닫았다. #50은 카카오 실 브라우저 로그인 스모크만 미검증이며(코드 경로는 provider 무관 동일) 이슈 코멘트에 남겼다. #83(2026-09-02)·#86(2026-09-03)도 닫았으므로 **현재 열린 이슈는 없다.** 남은 Sprint 2 항목(상세 페이지·UI 디자인)은 착수 시점에 Issue를 만든다.
+**이슈 정리**(2026-08-31): 완료됐는데 열려 있던 #6(Vercel 연동)·#39(웹 푸시)·#42(크롤 동결)·#50(소셜 로그인)을 근거 코멘트와 함께 닫았다. #50은 카카오 실 브라우저 로그인 스모크만 미검증이며(코드 경로는 provider 무관 동일) 이슈 코멘트에 남겼다. #83(2026-09-02)·#86(2026-09-03)·#96·#98(2026-09-04)도 닫았다. **2026-09-04 기준 열린 이슈는 #100·#101·#102·#103** — 전부 #96·#98 머지 후 스모크·점검에서 나온 후속이며 진행을 막지 않는다(위 "0. 최신 상태"의 표 참조). 남은 Sprint 2 항목(UI 디자인)은 착수 시점에 Issue를 만든다.
 
 ### ✅ 완료 — 크롤 파서 row 격리 (#72, 2026-08-31 이슈 닫음)
 
@@ -84,7 +107,7 @@ Sprint 2 1번 작업(웹 푸시 파이프라인, #39)을 Step(9-a~d)으로 쪼�
 
 **9-b 완료·머지**(PR #55, 2026-07-13): 구독 상태를 **계정의 속성**으로 재설계 — 구독 의사(L1 `push_preferences`, 계정당 1 row + `enabled`)와 배달 채널(L2 `push_subscriptions`, `UNIQUE(user_id, endpoint)`)을 분리해 같은 기기의 계정 간 독립 + 같은 계정의 기기 간 공유를 동시에 충족. `POST /api/push/subscribe`(L2 UPSERT + L1 ON)·`DELETE`(L1 OFF만) + 구독 토글 UI + 마운트 재동기화(공유 브라우저에서 타 계정 채널 오판 갭 차단)까지 연결. 이 과정에서 ADR 008을 **2차 재작성** — 직전의 "endpoint 단독 UNIQUE + 409 소유권" 모델은 폐기(위 문단의 "endpoint UNIQUE 유지" 서술은 이 시점부로 무효). 학습 문서: Supabase RLS 정리 **작성 완료**(`docs/learning/step9b-supabase-rls.md`).
 
-**9-c 완료·머지**(PR #58, 2026-07-20): 크롤 신규 감지 → 웹 푸시 발송 연결. `pushChannelsRepository`(L1 `enabled` 계정의 L2 채널 조회 + 만료 endpoint 삭제) + `buildNotificationPayload`(1건은 공고 제목 + soco `view.do` URL, N건은 집계 알림 — 내부 상세 페이지가 생기면 이 모듈의 URL 빌더만 교체) + `webPushClient`(`web-push` 어댑터, 실패를 statusCode 포함 결과 값으로 정규화) + `notificationService`(채널별 격리 발송 + `410`/`404` endpoint 정리 + `{sent, expired, failed}` 집계). `/api/cron/crawl`은 저장·`lastBoardId` 갱신 **완료 후** 발송하고, 발송 실패는 500이 아닌 응답 `push.error`로만 표면화(500이면 호출자 재시도 → 같은 공고 중복 발송이므로 유실을 수용 — ADR 008). 학습 문서: 웹 푸시 정리 **작성 완료**(`docs/learning/step9-web-push.md`).
+**9-c 완료·머지**(PR #58, 2026-07-20): 크롤 신규 감지 → 웹 푸시 발송 연결. `pushChannelsRepository`(L1 `enabled` 계정의 L2 채널 조회 + 만료 endpoint 삭제) + `buildNotificationPayload`(1건은 공고 제목 + soco `view.do` URL, N건은 집계 알림 — 내부 상세 페이지가 생기면 이 모듈의 URL 빌더만 교체) + `webPushClient`(`web-push` 어댑터, 실패를 statusCode 포함 결과 값으로 정규화) + `notificationService`(채널별 격리 발송 + `410`/`404` endpoint 정리 + `{sent, expired, failed}` 집계). `/api/cron/crawl`은 저장·`lastBoardId` 갱신 **완료 후** 발송하고, 발송 실패는 500이 아닌 응답 `push.error`로만 표면화(500이면 호출자 재시도 → 같은 공고 중복 발송이므로 유실을 수용 — ADR 008). 학습 문서: 웹 푸시 정리 **작성 완료**(`docs/learning/step9-web-push.md`). **※ URL 빌더는 #96(2026-09-04)에서 교체됨** — `buildAnnouncementUrl`이 `lib/announcements/announcementUrl`로 옮겨가 내부 상세 절대 URL을 만든다(`NEXT_PUBLIC_SITE_URL` 기반). 이 문단의 "soco `view.do` URL"은 더 이상 현재 동작이 아니다.
 
 **외부 선결 완료 + 실환경 수동 검증 성공**(2026-07-20): 외부 선결 3종(OAuth 콘솔·provider 설정 / 00002 마이그레이션 적용 / VAPID env 로컬·Vercel 주입) 모두 완료. 카카오 이메일(account_email)은 **비즈 앱 전용 권한**이라 동의항목에서 제외하고 Supabase Kakao provider의 **"Allow users without an email"** 로 대응 — 파이프라인은 email이 아닌 `user_id` 기준이라 영향 없음(이메일 알림 도입 시 카카오 사용자는 수신 주소 부재 유의). 검증: 로컬에서 구글 로그인 → 구독 토글 ON(L1·L2 row 생성 확인) → `last_board_id` 하향 후 크롤 트리거 → `push: {sent: 1}` + Chrome 알림 수신까지 **MVP 핵심 경로 관통 확인**. 이 과정에서 두 이슈를 밟고 해소: ① Supabase Redirect URLs를 경로 고정형에서 **globstar(`/**`)로 교체**(쿼리 파라미터 붙는 redirectTo가 매칭 실패 → Site URL 루트로 낙하하던 문제), ② **Supabase의 새 테이블 자동 GRANT 폐기**(2026-05-30~)로 `permission denied for table` — GRANT 명시로 해소, 마이그레이션 파일 백필 + RLS 학습 문서 §2 보강(이 커밋).
 
@@ -133,6 +156,8 @@ Sprint 2 1번 작업(웹 푸시 파이프라인, #39)을 Step(9-a~d)으로 쪼�
 | 목록 Step c-3   | 필터 UI (#83): `AnnouncementFilterBar`(서버 컴포넌트 + 링크, JS 0) + `parseListParams`(화이트리스트 검증 — **모르는 값은 무시**, `parsePageParam` 이관, round-trip 테스트) + 필터 변경 시 `page` 리셋·페이지 이동 시 필터 유지 + 빈 목록 문구 3분기. 유닛 294. **#83 완결·이슈 닫음**                                                                                                                            | PR #91                                                                                              |
 | 날짜 필드 a     | 목록 파서 매핑 정정 (#86): `applicationStartDate` ← `optn4`(청약신청일), 마감일은 null 고정. `optn1`(공고게시일)은 `regDate` 파생 `postDate`와 같은 값이라 미사용. `BbsListJsonItem`의 optn1~5에 의미 주석(같은 오매핑 재발 방지). 유닛 295                                                                                                                                                                      | PR #93                                                                                              |
 | 날짜 필드 b     | 필드명 리네임 + 부재 필드 제거 (#86): `applicationStartDate`→`applicationDate`(DB `application_date`) + `applicationEndDate`·`resultDate` **제거**(마이그레이션 00004 RENAME+DROP). 해명 주석 2블록 삭제, UI 동작 무변경. 18파일 +79/−96. **※ 되살리기 전 ADR 014 필독** — `subscriptionDate`(웹 푸시 구독과 어휘 충돌)·필드 유지·expand-contract 3건을 배제한 근거가 거기 있다                                  | **ADR 014**; PR #94                                                                                 |
+| 상세 페이지     | 공고 상세 + 링크 일원화 (#96): `/announcements/[boardId]`(PPR — `params`를 Suspense 하위에서 읽어 `◐` 확인, `generateStaticParams` 미사용, 캐시 태그는 목록과 공유) + `getAnnouncementByBoardId`(없으면 null, 컬럼 미선별) + `rowToAnnouncement` + `lib/announcements/announcementUrl`(절대 URL, `NEXT_PUBLIC_SITE_URL` 미설정 시 throw) + 카드·알림 링크 내부 전환. `ChannelAdapter` 계약 무변경. 유닛 303      | PR #97; `learning/step83-cache-components` §8 (동적 세그먼트)                                       |
+| 원본 링크       | 상세에 원본 공고 링크 (#98): `buildSourceUrl`(`getSiteUrl()`을 타지 않음 — env 누락이 페이지 렌더를 깨면 안 된다) + 첨부 유무 무관 항상 노출. #96이 평문화로 잃은 표·이미지 접근 경로를 복구. 유닛 310                                                                                                                                                                                                           | PR #99                                                                                              |
 | 운영·회고       | Sprint 1 운영 검증 (GHA dispatch 2회 success, `last_board_id` 6561 갱신) + Sprint 1 회고                                                                                                                                                                                                                                                                                                                         | `retrospectives/sprint-1`                                                                           |
 
 > ADR 전체: `docs/adr/` — 001 기술스택, 002/003 데이터소스·매핑, 004 스케줄러, 005 부트스트랩, 006 크롤 출력 검증, 007 크롤 범위, 008 구독 저장 모델(구독 의사/배달 채널 분리), 009 소셜 로그인, 010 E2E 테스트 전략(소유 표면 자동화 + 실 OAuth·FCM 경계), 011 멀티채널 알림 모델(역량 기반 opt-in + 채널 플러그형 발송), 012 목록 파서 row 격리(격리 vs 중단 경계 — 국지적 오입력은 격리, 전면 붕괴는 `LIST_EMPTY`로 중단), 013 목록 페이지 렌더링 모델(Cache Components 전환 + 태그 기반 무효화 — 폐기한 접근 5건 포함), 014 공고 날짜 필드 정정(리네임·부재 필드 제거·마이그레이션 순서 3축 — "소스에 없는 것은 타입이 표현하지 않는다").
@@ -157,10 +182,10 @@ Sprint 2 1번 작업(웹 푸시 파이프라인, #39)을 Step(9-a~d)으로 쪼�
 - ~~크롤 파서 row 격리 (#72, ADR 012)~~: **완결·이슈 닫음**(2026-08-31, PR #81 — 위 "✅ 완료" 섹션)
 - ~~공고 목록 페이지 (#83)~~: **완결·이슈 닫음**(2026-09-02, Step a→b→c-1→c-2→c-3 전부 머지 — 위 "✅ 완료" 섹션). 이월 항목이던 `'use cache: remote'` 캐시 적중도 프로덕션에서 확인 완료(ADR 013 "캐시 적중 검증")
 - ~~파서 날짜 매핑 정정 (#86, ADR 014)~~: **완결·이슈 닫음**(2026-09-03, Step a→b 머지 — 위 "✅ 완료" 섹션). 3안 전부 진행(매핑 정정 + `applicationDate` 리네임 + 부재 필드 제거). **마이그레이션 00004 적용·검증 완료**(프로덕션 + 테스트 양쪽, 컬럼 구성 조회 + 크롤 dispatch 200)
-- 공고 상세 페이지 (동적 라우트 `[boardId]`) — 이게 생기면 알림 URL 빌더(`buildNotificationPayload`·`buildEmailPayload`)를 soco `view.do`에서 내부 상세로 교체할 수 있다(9-c 주석에 명시된 교체 지점). 렌더할 날짜는 `postDate`·`applicationDate` 둘뿐이다(ADR 014 — 마감일·발표일은 타입에서 제거됨)
+- ~~공고 상세 페이지 (동적 라우트 `[boardId]`)~~: **완결·이슈 닫음**(2026-09-04, #96·#98 — 위 "✅ 완료" 섹션). 알림 URL 빌더(`buildNotificationPayload`·`buildEmailPayload`)도 같은 PR에서 soco `view.do` → 내부 상세로 **교체 완료**(9-c 주석이 지정한 교체 지점). **미검증 1건**: `NEXT_PUBLIC_SITE_URL`은 신규 공고가 있는 회차에만 실행되므로 다음 새 공고 때 크롤 응답으로 확인해야 한다
 - 위 화면 확정 후 UI 디자인 일괄 작업 (v0/Lovable 등)
 
-마일스톤 = MVP 완성: 새 공고 → 크롤링 감지 → 구독자 알림 → 웹에서 확인. **2026-09-02 #83 완결로 이 경로는 연결됐다.** 남은 두 항목(상세 페이지·UI 디자인)은 MVP 경로 위의 개선이며, 둘을 끝낸 뒤 Sprint 2 회고를 쓴다.
+마일스톤 = MVP 완성: 새 공고 → 크롤링 감지 → 구독자 알림 → 웹에서 확인. **2026-09-02 #83 완결로 이 경로는 연결됐다.** 남은 항목(UI 디자인)은 MVP 경로 위의 개선이며, 이를 끝낸 뒤 Sprint 2 회고를 쓴다(ADR 015 편입 여부는 별도 판단 — "0. 최신 상태" 참조).
 
 #### 미해결 부수 의문 (운영에 영향 없음, 추후 확인)
 

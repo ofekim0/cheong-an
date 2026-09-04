@@ -69,10 +69,19 @@ pnpm build
 | Vercel 환경변수 | `SUPABASE_URL`              | Supabase Project Settings → API                      |
 | Vercel 환경변수 | `SUPABASE_SERVICE_ROLE_KEY` | 동일 (server-side, 클라이언트 노출 금지)             |
 | Vercel 환경변수 | `CRON_SECRET`               | 임의 난수 (예: `openssl rand -hex 32`)               |
+| Vercel 환경변수 | `NEXT_PUBLIC_SITE_URL`      | 배포 URL (예: `https://cheong-an.vercel.app`)        |
 | GitHub Secrets  | `CRON_SECRET`               | **Vercel과 동일 값**                                 |
 | GitHub Secrets  | `DEPLOY_URL`                | Vercel 배포 URL (예: `https://cheong-an.vercel.app`) |
 
 토큰 불일치 호출은 401로 거부된다. `CRON_SECRET`을 회전하면 두 곳을 함께 갱신한다.
+
+`NEXT_PUBLIC_SITE_URL`은 알림(웹 푸시·이메일)이 보내는 공고 링크의 절대 URL을 만드는 데 쓴다(#96). 등록 시 유의할 점 셋:
+
+- **끝에 `/`를 붙이지 않는다.** 경로는 코드가 붙인다.
+- **Vercel Type은 `Secret`이 아니라 `Config`.** `NEXT_PUBLIC_` 접두사가 붙은 값은 정의상 브라우저에 노출되므로 Secret으로 저장하면 거부된다. 값 자체가 공개 도메인이라 무해하다(접두사 자체가 불필요하다는 문제는 #103).
+- **저장 후 재배포가 필요하다.** Vercel 환경변수는 저장 이후 생성되는 배포부터 적용되므로, 이미 떠 있는 배포에는 반영되지 않는다.
+
+미설정이면 **알림 발송만** 채널 에러로 떨어진다(`notifications.<channel>.error`). 크롤은 200을 유지하고 목록·상세 페이지는 영향이 없어 **조용히 지나가므로**, 새 공고가 온 회차의 크롤 응답 본문으로 확인한다.
 
 #### 수동 트리거
 
