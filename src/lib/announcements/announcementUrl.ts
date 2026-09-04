@@ -50,3 +50,25 @@ export function buildAnnouncementUrl(boardId: number): string {
 export function buildAnnouncementListUrl(): string {
   return `${getSiteUrl()}${ANNOUNCEMENTS_PATH}`;
 }
+
+/**
+ * 원본 공고(soco view.do) 링크 (#98).
+ *
+ * 상세 페이지가 렌더하는 본문은 `parseDetailPage`가 `.text()`로 뽑은 평문이라
+ * 원본의 표·이미지·서식이 없다. 첨부 PDF가 있으면 그쪽으로 우회되지만
+ * `attachment_url`이 null인 공고는 원본에 닿을 경로가 아예 없어진다 — 그래서
+ * 첨부 유무와 무관하게 이 링크를 노출한다.
+ *
+ * `getSiteUrl()`을 타지 않는다: 원본 URL은 우리 배포 도메인과 무관하다. 여기서
+ * env를 읽으면 `NEXT_PUBLIC_SITE_URL` 누락이 알림뿐 아니라 상세 페이지 렌더까지
+ * 깨뜨린다 — 지금은 알림만 채널 단위로 격리되고 페이지는 무사한 구조이고,
+ * 그 경계를 지킨다.
+ *
+ * 크롤러(`announcementService`·`canary`)에 같은 URL 리터럴이 있지만 공유하지
+ * 않는다. 그쪽은 `Referer`와 짝을 이루는 **fetch 설정**이자 테스트가 갈아끼우는
+ * 주입 지점(`buildViewUrl` 옵션)이라 성격이 다르다 — 표시용 링크가 크롤 설정에
+ * 묶이면 한쪽을 바꿀 때 다른 쪽이 따라 움직인다. 리터럴 중복은 감수한다.
+ */
+export function buildSourceUrl(boardId: number): string {
+  return `https://soco.seoul.go.kr/youth/bbs/BMSR00015/view.do?boardId=${boardId}&menuNo=400008`;
+}

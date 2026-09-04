@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   buildAnnouncementListUrl,
   buildAnnouncementUrl,
+  buildSourceUrl,
 } from './announcementUrl';
 
 afterEach(() => {
@@ -57,5 +58,22 @@ describe('buildAnnouncementListUrl', () => {
     vi.stubEnv('NEXT_PUBLIC_SITE_URL', '');
 
     expect(() => buildAnnouncementListUrl()).toThrow(/NEXT_PUBLIC_SITE_URL/);
+  });
+});
+
+describe('buildSourceUrl', () => {
+  it('boardId로 원본 view.do URL을 만든다', () => {
+    expect(buildSourceUrl(6644)).toBe(
+      'https://soco.seoul.go.kr/youth/bbs/BMSR00015/view.do?boardId=6644&menuNo=400008',
+    );
+  });
+
+  it('NEXT_PUBLIC_SITE_URL이 없어도 동작한다', () => {
+    // 원본 URL은 우리 배포 도메인과 무관하다. 여기서 env를 타면 설정 누락이
+    // 알림뿐 아니라 상세 페이지 렌더까지 깨뜨린다 (#98).
+    vi.stubEnv('NEXT_PUBLIC_SITE_URL', '');
+
+    expect(() => buildSourceUrl(6644)).not.toThrow();
+    expect(buildSourceUrl(6644)).toContain('soco.seoul.go.kr');
   });
 });
