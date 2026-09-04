@@ -39,5 +39,11 @@ jobs:
       - name: Unit tests
         run: pnpm test
 
+      # 목록 페이지가 빌드 시점에 전량 요약을 읽어 static shell에 임베드한다(ADR 015).
+      # 전용 테스트 프로젝트(cheong-an-test) 자격 증명을 준다 — e2e와 같은 secrets.
+      # env 부재 시 빈 목록으로 위장하는 폴백은 두지 않으므로(ADR 013·015) 없으면 빌드가 실패한다.
       - name: Build
         run: pnpm build
+        env:
+          SUPABASE_URL: ${{ secrets.TEST_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.TEST_SUPABASE_SERVICE_ROLE_KEY }}
