@@ -6,6 +6,7 @@ import type { AnnouncementDetail } from '@/types/announcement';
 import {
   detailToRow,
   getAnnouncementByBoardId,
+  listAllAnnouncementSummaries,
   listAnnouncements,
   rowToAnnouncement,
   rowToSummary,
@@ -631,5 +632,89 @@ describe('getAnnouncementByBoardId', () => {
     );
     // 검증이 먼저라 Supabase를 부르지 않는다.
     expect(from).not.toHaveBeenCalled();
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/* listAllAnnouncementSummaries (#106, ADR 015 Step a)                 */
+/* ------------------------------------------------------------------ */
+
+/**
+ * 전량 조회 체이닝 mock: `from().select(cols).order().order()` → result.
+ * `range`·`count`가 없는 것이 이 함수의 요점이라 그 둘은 mock에 두지 않는다 —
+ * 호출하면 TypeError로 드러난다.
+ */
+function createListAllMockClient(result: QueryResult) {
+  const secondOrder = vi.fn().mockResolvedValue(result);
+  const firstOrder = vi.fn().mockReturnValue({ order: secondOrder });
+  const select = vi.fn().mockReturnValue({ order: firstOrder });
+  const from = vi.fn().mockReturnValue({ select });
+  const client = { from } as unknown as SupabaseClient;
+
+  return { client, from, select, firstOrder, secondOrder };
+}
+
+describe('listAllAnnouncementSummaries', () => {
+  it('announcements 테이블에서 요약 컬럼만 count 없이 조회한다', async () => {
+    const { client, from, select } = createListAllMockClient({
+      data: [],
+      error: null,
+    });
+
+    await listAllAnnouncementSummaries(client);
+
+    expect(from).toHaveBeenCalledWith('announcements');
+    expect(select).toHaveBeenCalledTimes(1);
+    const [columns, options] = select.mock.calls[0] as [string, unknown];
+    expect(options).toBeUndefined();
+    expect(columns).not.toContain('raw_content');
+    expect(columns).toContain('board_id');
+    expect(columns).toContain('post_date');
+  });
+
+  it('post_date DESC 다음 board_id DESC — listAnnouncements와 같은 전순서', async () => {
+    const { client, firstOrder, secondOrder } = createListAllMockClient({
+      data: [],
+      error: null,
+    });
+
+    await listAllAnnouncementSummaries(client);
+
+    expect(firstOrder).toHaveBeenCalledWith('post_date', { ascending: false });
+    expect(secondOrder).toHaveBeenCalledWith('board_id', { ascending: false });
+  });
+
+  it('row를 요약으로 매핑해 순서대로 돌려준다', async () => {
+    const { client } = createListAllMockClient({
+      data: [
+        buildSummaryRow({ board_id: 6644 }),
+        buildSummaryRow({ board_id: 6643 }),
+      ],
+      error: null,
+    });
+
+    const result = await listAllAnnouncementSummaries(client);
+
+    expect(result.map((item) => item.boardId)).toEqual([6644, 6643]);
+    expect(result[0]).toEqual(
+      rowToSummary(buildSummaryRow({ board_id: 6644 })),
+    );
+  });
+
+  it('data가 null이면 빈 배열', async () => {
+    const { client } = createListAllMockClient({ data: null, error: null });
+
+    await expect(listAllAnnouncementSummaries(client)).resolves.toEqual([]);
+  });
+
+  it('Supabase 에러는 메시지를 담아 throw한다', async () => {
+    const { client } = createListAllMockClient({
+      data: null,
+      error: { message: 'connection refused' },
+    });
+
+    await expect(listAllAnnouncementSummaries(client)).rejects.toThrow(
+      'Failed to list all announcements: connection refused',
+    );
   });
 });

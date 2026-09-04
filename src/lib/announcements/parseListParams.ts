@@ -12,7 +12,7 @@
  */
 
 import type { AnnouncementType, RecruitmentType } from '@/types/announcement';
-import type { AnnouncementFilters } from '@/lib/supabase/announcementsRepository';
+import type { AnnouncementFilters } from '@/lib/announcements/filterAnnouncements';
 
 /** URL 쿼리 파라미터 이름. 필터 UI·페이지네이션·파싱이 공유한다. */
 export const PAGE_PARAM = 'page';
@@ -21,6 +21,48 @@ export const RECRUITMENT_PARAM = 'recruitment';
 
 /** Next의 `searchParams`가 돌려주는 값의 형태. */
 type ParamValue = string | string[] | undefined;
+
+/** 파서들이 받는 입력 형태 — Next `searchParams` 객체와 `toParamRecord` 출력이 같은 모양이다. */
+export type ListParamRecord = { [key: string]: ParamValue };
+
+/**
+ * 브라우저의 `URLSearchParams`(`useSearchParams`가 돌려주는 것)를 파서 입력 형태로
+ * 바꾼다 (#106, ADR 015).
+ *
+ * 같은 키가 여러 번 오면 배열로 담아 Next `searchParams`와 같은 모양을 만든다 —
+ * 그래야 `parsePageParam`·`parseAnnouncementFilters`의 "첫 값만 쓴다" 규칙이 서버에서
+ * 읽든 브라우저에서 읽든 같은 결과를 낸다. 파싱 규칙을 두 벌 두지 않는 것이 이
+ * 어댑터의 목적이다.
+ */
+export function toParamRecord(searchParams: URLSearchParams): ListParamRecord {
+  const record: ListParamRecord = {};
+  for (const key of new Set(searchParams.keys())) {
+    const values = searchParams.getAll(key);
+    record[key] = values.length === 1 ? values[0] : values;
+  }
+  return record;
+}
+
+/** URL 하나가 결정하는 목록 상태. */
+export interface ListQuery {
+  page: number;
+  filters: AnnouncementFilters;
+}
+
+/**
+ * page와 필터를 한 번에 파싱한다. 클라이언트 컴포넌트의 진입점 — 서버 페이지가
+ * `parsePageParam`·`parseAnnouncementFilters`를 따로 부르던 것을 묶었을 뿐 규칙은 같다.
+ */
+export function parseListQuery(
+  params: ListParamRecord | URLSearchParams,
+): ListQuery {
+  const record =
+    params instanceof URLSearchParams ? toParamRecord(params) : params;
+  return {
+    page: parsePageParam(record[PAGE_PARAM]),
+    filters: parseAnnouncementFilters(record),
+  };
+}
 
 /** 허용 값 화이트리스트. enum이라 닫힌 집합으로 검증할 수 있다. */
 const ANNOUNCEMENT_TYPES: readonly AnnouncementType[] = ['public', 'private'];
