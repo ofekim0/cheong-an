@@ -227,8 +227,8 @@ describe('GET /api/cron/crawl', () => {
     const response = await GET(makeRequest('Bearer test-secret'));
 
     expect(response.status).toBe(200);
-    // 경로가 아니라 태그를 버린다 — 쿼리 조합(`?page=2` 등)마다 캐시 항목이
-    // 따로 생기는데 경로 무효화로는 그것들을 지목할 수 없다.
+    // 경로가 아니라 태그를 버린다 — 태그가 목록 전량 캐시와 상세 boardId별 캐시를
+    // 함께 덮는다(ADR 015). 경로 무효화로는 상세 항목들을 지목할 수 없다.
     // `{ expire: 0 }`이어야 stale을 내보내지 않는다: 알림을 받고 들어온 첫
     // 방문자가 그 공고가 빠진 목록을 보면 안 된다.
     expect(revalidateTag).toHaveBeenCalledWith('announcements', { expire: 0 });

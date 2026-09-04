@@ -24,6 +24,11 @@ const DETAIL_PATH = `/announcements/${SEED_ANNOUNCEMENT.board_id}`;
 test.describe('공고 목록 → 상세 이동 (비로그인)', () => {
   test.use({ storageState: { cookies: [], origins: [] } });
 
+  // 두 테스트가 같은 시드 row를 공유하므로 직렬 실행한다 — fullyParallel에서 워커가
+  // 갈리면 beforeAll/afterAll이 워커마다 돌아, 한쪽의 afterAll이 시드를 지우는 사이
+  // 다른 쪽 상세 페이지가 404가 되는 race가 난다(sendChannels.spec.ts와 같은 이유).
+  test.describe.configure({ mode: 'serial' });
+
   test.beforeAll(async () => {
     await seedAnnouncement();
   });
@@ -66,5 +71,45 @@ test.describe('공고 목록 → 상세 이동 (비로그인)', () => {
       `https://soco.seoul.go.kr/youth/bbs/BMSR00015/view.do?boardId=${SEED_ANNOUNCEMENT.board_id}&menuNo=400008`,
     );
     await expect(sourceLink).toHaveAttribute('target', '_blank');
+  });
+
+  /**
+   * 필터 클릭은 서버 왕복 없이 URL만 바꾼다(ADR 015, #106). 시드가 민간 1건이므로
+   * "공공"을 걸면 0건, 다시 "전체"로 돌리면 1건이다 — 건수 문구와 URL이 함께 움직이는지,
+   * 그리고 그 사이에 문서 요청(RSC 페이로드 포함)이 발생하지 않는지를 본다.
+   */
+  test('필터 칩을 누르면 서버 요청 없이 URL과 건수가 바뀐다', async ({
+    page,
+  }) => {
+    await page.goto('/announcements');
+    const count = page.locator('main > p').first();
+    await expect(count).toHaveText(/전체 \d+건/);
+
+    // 클릭 이후 발생하는 document·fetch 요청을 잡는다. 정적 자산은 제외한다.
+    const requests: string[] = [];
+    page.on('request', (request) => {
+      const type = request.resourceType();
+      if (type === 'document' || type === 'fetch' || type === 'xhr') {
+        requests.push(request.url());
+      }
+    });
+
+    await page.getByRole('link', { name: '공공', exact: true }).click();
+    await expect(page).toHaveURL(/\?type=public$/);
+    await expect(count).toHaveText('조건에 맞는 공고 0건');
+    await expect(page.getByText('조건에 맞는 공고가 없습니다.')).toBeVisible();
+
+    // 유형 필터의 "전체"로 되돌린다(모집 필터의 "전체"는 선택 상태라 링크가 아니다).
+    await page
+      .getByRole('navigation', { name: '유형 필터' })
+      .getByRole('link', { name: '전체', exact: true })
+      .click();
+    await expect(page).toHaveURL(/\/announcements$/);
+    await expect(count).toHaveText(/전체 \d+건/);
+    await expect(
+      page.getByRole('link', { name: SEED_ANNOUNCEMENT.title }),
+    ).toBeVisible();
+
+    expect(requests, '필터 클릭이 서버 요청을 유발했다').toEqual([]);
   });
 });

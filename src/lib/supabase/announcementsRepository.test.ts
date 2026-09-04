@@ -7,7 +7,6 @@ import {
   detailToRow,
   getAnnouncementByBoardId,
   listAllAnnouncementSummaries,
-  listAnnouncements,
   rowToAnnouncement,
   rowToSummary,
   upsertAnnouncements,
@@ -158,51 +157,6 @@ interface QueryResult {
   error?: { message: string; code?: string } | null;
 }
 
-/**
- * 읽기 경로의 Supabase 체이닝 mock.
- *
- * - 목록 조회: `from().select(cols, {count}).eq()*.order().order().range()` → listResult
- * - count 조회(fallback): `from().select('board_id', {head: true}).eq()*` → countResult
- *   head 옵션 유무로 두 경로를 갈라, 한 mock으로 둘 다 검증한다.
- *
- * count 경로는 `eq` 체이닝 뒤에 그대로 await되므로 thenable로 만든다 — 실제
- * PostgREST 빌더도 필터를 더 붙일 수 있으면서 await 가능한 객체다.
- */
-function createReadMockClient(results: {
-  list?: QueryResult;
-  count?: QueryResult;
-}) {
-  const listResult: QueryResult = results.list ?? {
-    data: [],
-    count: 0,
-    error: null,
-  };
-  const countResult: QueryResult = results.count ?? { count: 0, error: null };
-
-  const range = vi.fn().mockResolvedValue(listResult);
-  const order = vi.fn();
-  const listEq = vi.fn();
-  const chain = { eq: listEq, order, range };
-  order.mockReturnValue(chain);
-  listEq.mockReturnValue(chain);
-
-  const countEq = vi.fn();
-  const countChain = {
-    eq: countEq,
-    then: (onFulfilled: (value: QueryResult) => unknown) =>
-      Promise.resolve(countResult).then(onFulfilled),
-  };
-  countEq.mockReturnValue(countChain);
-
-  const select = vi.fn((_columns: string, options?: { head?: boolean }) =>
-    options?.head ? countChain : chain,
-  );
-  const from = vi.fn().mockReturnValue({ select });
-  const client = { from } as unknown as SupabaseClient;
-
-  return { client, from, select, order, range, listEq, countEq };
-}
-
 describe('rowToSummary', () => {
   it('snake_case row를 camelCase 요약으로 매핑한다', () => {
     expect(rowToSummary(buildSummaryRow())).toEqual({
@@ -229,261 +183,6 @@ describe('rowToSummary', () => {
     expect(summary.complexName).toBeNull();
     expect(summary.district).toBeNull();
     expect(summary.applicationDate).toBeNull();
-  });
-});
-
-describe('listAnnouncements', () => {
-  it('announcements 테이블을 exact count와 함께 조회한다', async () => {
-    const { client, from, select } = createReadMockClient({});
-
-    await listAnnouncements(client, { page: 1, pageSize: 20 });
-
-    expect(from).toHaveBeenCalledWith('announcements');
-    const [, options] = select.mock.calls[0];
-    expect(options).toEqual({ count: 'exact' });
-  });
-
-  it('목록에 불필요한 raw_content를 select하지 않는다', async () => {
-    const { client, select } = createReadMockClient({});
-
-    await listAnnouncements(client, { page: 1, pageSize: 20 });
-
-    const [columns] = select.mock.calls[0] as [string];
-    expect(columns).not.toContain('raw_content');
-    expect(columns).toContain('board_id');
-    expect(columns).toContain('post_date');
-  });
-
-  it('post_date DESC 다음 board_id DESC로 전순서를 만든다', async () => {
-    const { client, order } = createReadMockClient({});
-
-    await listAnnouncements(client, { page: 1, pageSize: 20 });
-
-    expect(order.mock.calls).toEqual([
-      ['post_date', { ascending: false }],
-      ['board_id', { ascending: false }],
-    ]);
-  });
-
-  it('page/pageSize를 0-based range로 변환한다', async () => {
-    const { client, range } = createReadMockClient({});
-
-    await listAnnouncements(client, { page: 3, pageSize: 20 });
-
-    expect(range).toHaveBeenCalledWith(40, 59);
-  });
-
-  it('row를 요약으로 매핑하고 total을 함께 반환한다', async () => {
-    const { client } = createReadMockClient({
-      list: {
-        data: [
-          buildSummaryRow({ board_id: 6644 }),
-          buildSummaryRow({ board_id: 6643 }),
-        ],
-        count: 68,
-        error: null,
-      },
-    });
-
-    const result = await listAnnouncements(client, { page: 1, pageSize: 20 });
-
-    expect(result.total).toBe(68);
-    expect(result.items).toHaveLength(2);
-    expect(result.items[0].boardId).toBe(6644);
-    expect(result.items[1].boardId).toBe(6643);
-  });
-
-  it('결과가 없으면 빈 items와 total 0을 반환한다', async () => {
-    const { client } = createReadMockClient({
-      list: { data: [], count: 0, error: null },
-    });
-
-    await expect(
-      listAnnouncements(client, { page: 1, pageSize: 20 }),
-    ).resolves.toEqual({ items: [], total: 0 });
-  });
-
-  it('범위를 벗어난 page(PGRST103)는 에러가 아니라 빈 페이지 + 실제 total', async () => {
-    const { client, select } = createReadMockClient({
-      list: {
-        data: null,
-        count: null,
-        error: {
-          code: 'PGRST103',
-          message: 'Requested range not satisfiable',
-        },
-      },
-      count: { count: 68, error: null },
-    });
-
-    const result = await listAnnouncements(client, { page: 999, pageSize: 20 });
-
-    expect(result).toEqual({ items: [], total: 68 });
-    // 두 번째 호출이 head 모드 count 조회
-    expect(select.mock.calls[1][1]).toEqual({ count: 'exact', head: true });
-  });
-
-  it('그 밖의 Supabase 에러는 page/pageSize를 담아 throw', async () => {
-    const { client } = createReadMockClient({
-      list: {
-        data: null,
-        count: null,
-        error: { code: '42501', message: 'permission denied' },
-      },
-    });
-
-    await expect(
-      listAnnouncements(client, { page: 2, pageSize: 20 }),
-    ).rejects.toThrow(
-      /Failed to list announcements \(page=2, pageSize=20\): permission denied/,
-    );
-  });
-
-  it('count 조회 자체가 실패하면 throw', async () => {
-    const { client } = createReadMockClient({
-      list: {
-        data: null,
-        count: null,
-        error: { code: 'PGRST103', message: 'range not satisfiable' },
-      },
-      count: { count: null, error: { message: 'connection lost' } },
-    });
-
-    await expect(
-      listAnnouncements(client, { page: 999, pageSize: 20 }),
-    ).rejects.toThrow(/Failed to count announcements: connection lost/);
-  });
-
-  it.each([0, -1, 1.5, Number.NaN])(
-    'page=%s면 조회 전에 RangeError',
-    async (page) => {
-      const { client, from } = createReadMockClient({});
-
-      await expect(
-        listAnnouncements(client, { page, pageSize: 20 }),
-      ).rejects.toThrow(RangeError);
-      expect(from).not.toHaveBeenCalled();
-    },
-  );
-
-  it.each([0, -5, 2.5])(
-    'pageSize=%s면 조회 전에 RangeError',
-    async (pageSize) => {
-      const { client, from } = createReadMockClient({});
-
-      await expect(
-        listAnnouncements(client, { page: 1, pageSize }),
-      ).rejects.toThrow(RangeError);
-      expect(from).not.toHaveBeenCalled();
-    },
-  );
-
-  describe('필터', () => {
-    it('filters를 생략하면 eq 조건을 걸지 않는다', async () => {
-      const { client, listEq } = createReadMockClient({});
-
-      await listAnnouncements(client, { page: 1, pageSize: 20 });
-
-      expect(listEq).not.toHaveBeenCalled();
-    });
-
-    it('announcementType만 지정하면 그 컬럼에만 eq를 건다', async () => {
-      const { client, listEq } = createReadMockClient({});
-
-      await listAnnouncements(client, {
-        page: 1,
-        pageSize: 20,
-        filters: { announcementType: 'public' },
-      });
-
-      expect(listEq.mock.calls).toEqual([['announcement_type', 'public']]);
-    });
-
-    it('recruitmentType만 지정하면 그 컬럼에만 eq를 건다', async () => {
-      const { client, listEq } = createReadMockClient({});
-
-      await listAnnouncements(client, {
-        page: 1,
-        pageSize: 20,
-        filters: { recruitmentType: 'additional' },
-      });
-
-      expect(listEq.mock.calls).toEqual([['recruitment_type', 'additional']]);
-    });
-
-    it('두 차원을 함께 지정하면 eq를 둘 다 건다', async () => {
-      const { client, listEq } = createReadMockClient({});
-
-      await listAnnouncements(client, {
-        page: 1,
-        pageSize: 20,
-        filters: {
-          announcementType: 'private',
-          recruitmentType: 'initial',
-        },
-      });
-
-      expect(listEq.mock.calls).toEqual([
-        ['announcement_type', 'private'],
-        ['recruitment_type', 'initial'],
-      ]);
-    });
-
-    it('값이 undefined인 차원은 제약 없음으로 취급한다', async () => {
-      const { client, listEq } = createReadMockClient({});
-
-      await listAnnouncements(client, {
-        page: 1,
-        pageSize: 20,
-        filters: { announcementType: undefined, recruitmentType: 'initial' },
-      });
-
-      expect(listEq.mock.calls).toEqual([['recruitment_type', 'initial']]);
-    });
-
-    it('필터를 적용한 total을 반환한다', async () => {
-      const { client } = createReadMockClient({
-        list: { data: [buildSummaryRow()], count: 12, error: null },
-      });
-
-      const result = await listAnnouncements(client, {
-        page: 1,
-        pageSize: 20,
-        filters: { announcementType: 'public' },
-      });
-
-      expect(result.total).toBe(12);
-    });
-
-    it('범위 초과 시 fallback count 조회에도 같은 필터를 적용한다', async () => {
-      const { client, countEq } = createReadMockClient({
-        list: {
-          data: null,
-          count: null,
-          error: {
-            code: 'PGRST103',
-            message: 'Requested range not satisfiable',
-          },
-        },
-        count: { count: 12, error: null },
-      });
-
-      const result = await listAnnouncements(client, {
-        page: 999,
-        pageSize: 20,
-        filters: {
-          announcementType: 'public',
-          recruitmentType: 'initial',
-        },
-      });
-
-      // 목록과 count에 필터가 같이 걸려야 total이 "필터 적용 후 건수"가 된다.
-      expect(countEq.mock.calls).toEqual([
-        ['announcement_type', 'public'],
-        ['recruitment_type', 'initial'],
-      ]);
-      expect(result).toEqual({ items: [], total: 12 });
-    });
   });
 });
 
@@ -517,7 +216,7 @@ function buildFullRow(
 
 /**
  * `from().select('*').eq().single()` 체인 mock.
- * 목록 쪽 `createReadMockClient`와 분리한 이유: 상세는 `single()`로 끝나 count
+ * 목록 쪽 mock(`createListAllMockClient`)과 분리한 이유: 상세는 `single()`로 끝나 count
  * 분기가 없고, 한 mock에 두 형태를 합치면 어느 경로가 검증됐는지 흐려진다.
  */
 function createSingleMockClient(result: QueryResult) {
@@ -672,7 +371,7 @@ describe('listAllAnnouncementSummaries', () => {
     expect(columns).toContain('post_date');
   });
 
-  it('post_date DESC 다음 board_id DESC — listAnnouncements와 같은 전순서', async () => {
+  it('post_date DESC 다음 board_id DESC로 전순서를 만든다', async () => {
     const { client, firstOrder, secondOrder } = createListAllMockClient({
       data: [],
       error: null,
