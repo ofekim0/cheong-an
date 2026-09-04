@@ -11,6 +11,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 
+import type { AnnouncementFilters } from '@/lib/announcements/filterAnnouncements';
 import type {
   AnnouncementDetail,
   AnnouncementRow,
@@ -137,17 +138,47 @@ export function rowToSummary(row: AnnouncementSummaryRow): AnnouncementSummary {
 }
 
 /**
- * 목록 조회에 적용할 필터 (#83 Step c).
+ * 전량 요약 조회 (#106, ADR 015 Step a).
  *
- * 지정하지 않은(`undefined`) 차원은 제약 없음 = 전체다. 두 차원 모두 DB에서
- * NOT NULL이고 값 집합이 닫힌 enum이라, 필터 옵션을 코드 상수로 고정할 수 있고
- * "미기재"를 어떻게 다룰지 정책을 정할 필요가 없다. `district`는 nullable이고
- * 사이트 원문 문자열이 그대로 들어와 정규화가 안 돼 있어 이 단계에서 제외했다.
+ * 필터·페이지네이션을 브라우저가 계산하는 모델의 데이터 공급원이다. `range`도
+ * `count`도 없다 — 전체를 한 번에 읽어 static shell에 임베드하고, 고르는 일은
+ * `filterAnnouncements`가 맡는다. 정렬은 `listAnnouncements`와 같다(`post_date DESC,
+ * board_id DESC`, 전순서 보장 이유는 그쪽 주석) — 이 정렬이 목록 순서의 단일 출처이고
+ * 브라우저 쪽은 다시 정렬하지 않는다.
+ *
+ * 컬럼은 `SUMMARY_COLUMNS`로 고른다. `raw_content`(row당 수 KB)를 전량 실으면
+ * shell 크기가 곧바로 터진다 — ADR 015의 성장 트리거(압축 후 50KB)가 이 선택을
+ * 전제로 잡혀 있다.
+ *
+ * 조회는 service role 클라이언트(RLS 우회)를 전제로 한다 — 빌드·재검증 시점에
+ * 서버에서만 실행된다(#83 선결 확인: anon 키 직접 조회는 401).
  */
-export interface AnnouncementFilters {
-  announcementType?: AnnouncementType;
-  recruitmentType?: RecruitmentType;
+export async function listAllAnnouncementSummaries(
+  client: SupabaseClient,
+): Promise<AnnouncementSummary[]> {
+  const { data, error } = await client
+    .from(TABLE)
+    .select(SUMMARY_COLUMNS)
+    .order('post_date', { ascending: false })
+    .order('board_id', { ascending: false });
+
+  if (error) {
+    throw new Error(`Failed to list all announcements: ${error.message}`);
+  }
+
+  const rows = (data ?? []) as unknown as AnnouncementSummaryRow[];
+  return rows.map(rowToSummary);
 }
+
+/**
+ * 목록 조회에 적용할 필터.
+ *
+ * 타입의 소유자는 `lib/announcements/filterAnnouncements`로 옮겼다(ADR 015 — 필터가
+ * 서버 조회 조건이 아니라 브라우저 계산의 입력이 된다). 여기서는 아래 서버 필터
+ * 경로(`applyFilters`·`listAnnouncements`)와 기존 import 경로를 위해 다시 내보낸다.
+ * 서버 필터 경로가 삭제되는 Step c에서 이 re-export도 함께 지운다.
+ */
+export type { AnnouncementFilters };
 
 /** 필터 차원 → announcements 컬럼명. 차원 추가는 이 맵에 한 줄로 끝난다. */
 const FILTER_COLUMN: Record<keyof AnnouncementFilters, string> = {

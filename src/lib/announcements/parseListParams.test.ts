@@ -3,7 +3,9 @@ import { describe, expect, it } from 'vitest';
 import {
   filtersToSearchParams,
   parseAnnouncementFilters,
+  parseListQuery,
   parsePageParam,
+  toParamRecord,
 } from './parseListParams';
 
 describe('parsePageParam', () => {
@@ -132,5 +134,71 @@ describe('filtersToSearchParams', () => {
     expect(parseAnnouncementFilters(filtersToSearchParams(filters))).toEqual(
       filters,
     );
+  });
+});
+
+describe('toParamRecord', () => {
+  it('빈 URLSearchParams는 빈 레코드', () => {
+    expect(toParamRecord(new URLSearchParams(''))).toEqual({});
+  });
+
+  it('단일 값은 문자열로 담는다', () => {
+    expect(toParamRecord(new URLSearchParams('type=public&page=2'))).toEqual({
+      type: 'public',
+      page: '2',
+    });
+  });
+
+  // Next `searchParams`가 중복 키를 배열로 주는 것과 같은 모양 — 파서의 "첫 값만" 규칙이
+  // 서버·브라우저에서 같은 결과를 내게 한다.
+  it('같은 키가 여러 번 오면 배열로 담는다', () => {
+    expect(
+      toParamRecord(new URLSearchParams('type=public&type=private')),
+    ).toEqual({ type: ['public', 'private'] });
+  });
+
+  it('값이 빈 키도 빈 문자열로 보존한다', () => {
+    expect(toParamRecord(new URLSearchParams('page='))).toEqual({ page: '' });
+  });
+});
+
+describe('parseListQuery', () => {
+  it('URLSearchParams에서 page와 필터를 함께 파싱한다', () => {
+    expect(
+      parseListQuery(
+        new URLSearchParams('type=public&recruitment=additional&page=3'),
+      ),
+    ).toEqual({
+      page: 3,
+      filters: { announcementType: 'public', recruitmentType: 'additional' },
+    });
+  });
+
+  it('레코드 입력도 같은 규칙으로 파싱한다', () => {
+    expect(parseListQuery({ type: 'private', page: '2' })).toEqual({
+      page: 2,
+      filters: { announcementType: 'private' },
+    });
+  });
+
+  it('비어 있으면 1페이지·빈 필터', () => {
+    expect(parseListQuery(new URLSearchParams(''))).toEqual({
+      page: 1,
+      filters: {},
+    });
+  });
+
+  // 개별 파서와 같은 방어선: 모르는 값은 무시, 잘못된 page는 1, 중복 키는 첫 값.
+  it('잘못된 값은 개별 파서 규칙대로 정규화한다', () => {
+    expect(
+      parseListQuery(
+        new URLSearchParams('type=unknown&recruitment=initial&page=abc'),
+      ),
+    ).toEqual({ page: 1, filters: { recruitmentType: 'initial' } });
+    expect(
+      parseListQuery(
+        new URLSearchParams('type=public&type=private&page=2&page=5'),
+      ),
+    ).toEqual({ page: 2, filters: { announcementType: 'public' } });
   });
 });
