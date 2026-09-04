@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { buildEmailPayload } from './buildEmailPayload';
 import type { AnnouncementDetail } from '@/types/announcement';
@@ -24,15 +24,25 @@ function buildDetail(
   };
 }
 
-const VIEW_URL_6561 =
-  'https://soco.seoul.go.kr/youth/bbs/BMSR00015/view.do?boardId=6561&menuNo=400008';
+const SITE_URL = 'https://cheong-an.example.com';
+const DETAIL_URL_6561 = `${SITE_URL}/announcements/6561`;
+
+// URL 빌더가 배포 도메인 env를 요구한다(#96). 웹 푸시와 같은 빌더를 쓰므로
+// 두 채널의 링크가 갈라지지 않는다.
+beforeEach(() => {
+  vi.stubEnv('NEXT_PUBLIC_SITE_URL', SITE_URL);
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 describe('buildEmailPayload', () => {
   it('신규 공고가 없으면 null — 호출자는 발송을 생략한다', () => {
     expect(buildEmailPayload([])).toBeNull();
   });
 
-  it('1건이면 제목을 subject에 싣고 본문에 view.do 링크를 넣는다', () => {
+  it('1건이면 제목을 subject에 싣고 본문에 내부 상세 링크를 넣는다', () => {
     const detail = buildDetail(6561, '강동구 천호동 청년안심주택 모집공고');
 
     const payload = buildEmailPayload([detail]);
@@ -41,9 +51,9 @@ describe('buildEmailPayload', () => {
     expect(payload?.subject).toBe(
       '[청안] 새 청년안심주택 공고 — 강동구 천호동 청년안심주택 모집공고',
     );
-    expect(payload?.html).toContain(VIEW_URL_6561);
+    expect(payload?.html).toContain(DETAIL_URL_6561);
     expect(payload?.html).toContain('강동구 천호동 청년안심주택 모집공고');
-    expect(payload?.text).toContain(VIEW_URL_6561);
+    expect(payload?.text).toContain(DETAIL_URL_6561);
     expect(payload?.text).toContain('강동구 천호동 청년안심주택 모집공고');
   });
 
@@ -58,10 +68,11 @@ describe('buildEmailPayload', () => {
 
     expect(payload?.subject).toBe('[청안] 새 청년안심주택 공고 3건');
     for (const detail of details) {
+      const url = `${SITE_URL}/announcements/${detail.boardId}`;
       expect(payload?.html).toContain(detail.title);
-      expect(payload?.html).toContain(`boardId=${detail.boardId}`);
+      expect(payload?.html).toContain(url);
       expect(payload?.text).toContain(detail.title);
-      expect(payload?.text).toContain(`boardId=${detail.boardId}`);
+      expect(payload?.text).toContain(url);
     }
   });
 

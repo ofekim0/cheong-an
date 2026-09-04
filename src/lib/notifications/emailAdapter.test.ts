@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { buildEmailPayload } from './buildEmailPayload';
 import { createEmailAdapter } from './emailAdapter';
@@ -40,8 +40,14 @@ const FAILED: EmailSendResult = {
   message: 'Invalid `to` field',
 };
 
+// 페이로드 빌더가 배포 도메인 env를 요구한다(#96 — 알림 링크가 내부 상세로 감).
+beforeEach(() => {
+  vi.stubEnv('NEXT_PUBLIC_SITE_URL', 'https://cheong-an.example.com');
+});
+
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllEnvs();
 });
 
 describe('createEmailAdapter', () => {

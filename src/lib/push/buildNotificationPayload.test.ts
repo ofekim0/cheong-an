@@ -1,10 +1,19 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import {
-  buildAnnouncementUrl,
-  buildNotificationPayload,
-} from './buildNotificationPayload';
+import { buildNotificationPayload } from './buildNotificationPayload';
 import type { AnnouncementDetail } from '@/types/announcement';
+
+const SITE_URL = 'https://cheong-an.example.com';
+
+// URL 빌더가 배포 도메인 env를 요구한다(#96). 미설정 시 throw는
+// announcementUrl.test.ts가 덮으므로, 여기서는 페이로드 형태만 본다.
+beforeEach(() => {
+  vi.stubEnv('NEXT_PUBLIC_SITE_URL', SITE_URL);
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 function createDetail(
   overrides: Partial<AnnouncementDetail>,
@@ -27,14 +36,6 @@ function createDetail(
   };
 }
 
-describe('buildAnnouncementUrl', () => {
-  it('boardId로 soco view.do URL을 만든다', () => {
-    expect(buildAnnouncementUrl(6561)).toBe(
-      'https://soco.seoul.go.kr/youth/bbs/BMSR00015/view.do?boardId=6561&menuNo=400008',
-    );
-  });
-});
-
 describe('buildNotificationPayload', () => {
   it('빈 배열이면 null을 반환한다 (발송 생략 신호)', () => {
     expect(buildNotificationPayload([])).toBeNull();
@@ -46,12 +47,12 @@ describe('buildNotificationPayload', () => {
     expect(buildNotificationPayload([detail])).toEqual({
       title: '청안 — 새 공고',
       body: '강동구 천호동 청년안심주택 입주자 모집공고',
-      url: buildAnnouncementUrl(6561),
+      url: `${SITE_URL}/announcements/6561`,
       tag: 'cheongan-announcement-6561',
     });
   });
 
-  it('여러 건이면 집계 알림 1개로 만들고 목록 URL로 보낸다', () => {
+  it('여러 건이면 집계 알림 1개로 만들고 내부 목록 URL로 보낸다', () => {
     const details = [
       createDetail({ boardId: 6561, title: '첫 번째 공고' }),
       createDetail({ boardId: 6562, title: '두 번째 공고' }),
@@ -61,7 +62,7 @@ describe('buildNotificationPayload', () => {
     expect(buildNotificationPayload(details)).toEqual({
       title: '청안 — 새 공고 3건',
       body: '첫 번째 공고 외 2건',
-      url: 'https://soco.seoul.go.kr/youth/bbs/BMSR00015/list.do?menuNo=400008',
+      url: `${SITE_URL}/announcements`,
       tag: 'cheongan-announcements-batch',
     });
   });

@@ -11,11 +11,15 @@
  *   분리해 서로 다른 공고가 덮어쓰지 않게 하고, 집계는 고정 tag로 최신
  *   배치만 남긴다.
  *
- * URL은 당분간 soco.seoul.go.kr 원문 공고로 보낸다(A안 — 내부 상세 페이지가
- * 아직 없음). Sprint 2에서 `/announcements/[boardId]`가 생기면 이 모듈의
- * URL 빌더만 교체한다.
+ * URL은 내부 상세·목록 페이지로 보낸다 (#96). 빌더는 `lib/announcements/
+ * announcementUrl`이 소유한다 — 이메일 채널도 같은 것을 쓰므로 채널 모듈이
+ * 아니라 도메인 모듈에 둔다.
  */
 
+import {
+  buildAnnouncementListUrl,
+  buildAnnouncementUrl,
+} from '@/lib/announcements/announcementUrl';
 import type { AnnouncementDetail } from '@/types/announcement';
 
 /** sw.js push 핸들러와 합의된 알림 페이로드 형태. */
@@ -27,14 +31,6 @@ export interface PushNotificationPayload {
 }
 
 const TITLE = '청안 — 새 공고';
-
-const LIST_URL =
-  'https://soco.seoul.go.kr/youth/bbs/BMSR00015/list.do?menuNo=400008';
-
-/** 공고 1건의 사용자용 원문 링크 (Sprint 2 내부 상세 페이지로 교체 예정). */
-export function buildAnnouncementUrl(boardId: number): string {
-  return `https://soco.seoul.go.kr/youth/bbs/BMSR00015/view.do?boardId=${boardId}&menuNo=400008`;
-}
 
 /**
  * 신규 공고 목록을 알림 페이로드 하나로 만든다.
@@ -59,7 +55,7 @@ export function buildNotificationPayload(
   return {
     title: `${TITLE} ${details.length}건`,
     body: `${details[0].title} 외 ${details.length - 1}건`,
-    url: LIST_URL,
+    url: buildAnnouncementListUrl(),
     tag: 'cheongan-announcements-batch',
   };
 }

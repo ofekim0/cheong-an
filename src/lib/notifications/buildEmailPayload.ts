@@ -9,13 +9,13 @@
  *   평시 newCount 0~2건이지만 부트스트랩·장애 복구 시 수십 건이 한 번에 올 수
  *   있어, 공고당 1통이면 스팸이 된다.
  *
- * URL은 웹 푸시와 동일하게 soco 원문(view.do)으로 보낸다 — 내부 상세 페이지가
- * 생기면 buildAnnouncementUrl만 교체되므로 이 모듈은 무변경.
+ * URL은 웹 푸시와 동일하게 내부 상세 페이지로 보낸다 (#96) — 빌더를 공유하므로
+ * 두 채널의 링크가 갈라지지 않는다.
  *
  * 공고 제목은 외부 사이트 파싱 결과이므로 html에는 이스케이프해 삽입한다.
  */
 
-import { buildAnnouncementUrl } from '@/lib/push/buildNotificationPayload';
+import { buildAnnouncementUrl } from '@/lib/announcements/announcementUrl';
 import type { AnnouncementDetail } from '@/types/announcement';
 
 /** 이메일 발송에 필요한 페이로드. Resend emails.send의 subject/html/text와 대응. */
