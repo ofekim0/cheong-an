@@ -7,6 +7,22 @@
 
 ## 0. 최신 상태 (2026-09-04 기준)
 
+### 🔄 진행 중 — 목록 데이터 전달 모델 전환 (#106, ADR 015) — Step a·b 머지, Step c 작업 중
+
+**배경**: 필터(공공/민간·최초/추가)·페이지 클릭이 체감상 느렸다. 원인은 세 겹 — ① 필터 바가 Suspense 안 서버 컴포넌트라 선택 칩 상태조차 서버 응답으로 옴(transition이 기존 화면 유지 → 클릭이 씹힌 것처럼 보임), ② 목록이 `searchParams` 뒤에 있어 클릭마다 서버 왕복 필수(prefetch는 shell만 받아 무력), ③ 왕복이 히트여도 0.33~0.37s·콜드 1.0s(ADR 013 측정). **데이터는 크롤 주기로만 바뀌고 전체 77건(요약 20KB 안팎)** — 필터 조건마다 서버가 잘라 줄 이유가 없다. ADR 013 선택지 표에 "전량을 내려보내고 브라우저가 고른다" 축이 없었다(기각이 아니라 미검토).
+
+**결정(ADR 015)**: 전량 요약을 `'use cache'` + 태그로 **static shell에 임베드**하고, 필터·페이지네이션은 `useSearchParams` 기반 클라이언트가 로컬 계산. 링크는 `href` 유지 + `history.pushState`(shallow routing)로 서버 요청 0. ADR 013의 "쿼리 조합별 `remote` 캐시" 모델과 세부 판단 1을 대체하고 플래그·태그 무효화·`{ expire: 0 }`은 유지. **성장 트리거**(첫 로드 압축 후 50KB / 클릭 반응 100ms) 중 하나가 깨지면 청크 분할 + TanStack Query로 한 층 얹는다 — 지금은 하지 않음(설계할 정보 없음, 첫 브라우저 fetch 시점이 TanStack Query 도입 시점).
+
+**선행 #101 완료·머지**(PR #105, 2026-09-04 이슈 닫음): 목록 → 상세 E2E. 테스트 DB `announcements`가 0건이라 스펙이 시드를 넣고 정리한다(`e2e/helpers/announcements.ts`, 결정적 고정값 — dev 서버 재사용 시 `'use cache'` 잔존 캐시와 무관하게 같은 화면). 비로그인으로 실행(ADR 009 열람 공개 방어). 함정: 클라이언트 내비게이션 직후 목록 카드 `<dd>`가 DOM에 남아 날짜 문자열이 둘 → 상세 단언을 `article` 범위로 좁혔다.
+
+**Step a 완료·머지**(PR #107): `filterAnnouncements.ts`(순수 함수 — `hasActiveFilters`/`filterAnnouncements`/`countPages`/`paginate`/`selectListPage`, `AnnouncementFilters` 타입의 새 소유자), `parseListParams`에 `URLSearchParams` 어댑터(`toParamRecord`·`parseListQuery`, 파싱 규칙 재사용), `listAllAnnouncementSummaries`(range·count 없음). 정렬은 조회 쪽만 담당하고 브라우저는 재정렬 안 함. 유닛 310 → 348.
+
+**Step b 완료·머지**(PR #108): `page.tsx`가 `searchParams`를 받지 않음(171줄 중 158줄 삭제), `AnnouncementList`(클라이언트, 분기 없음 — 전부 `lib` 호출), `ListLink`(수정키 없는 좌클릭만 `pushState`, `prefetch={false}`, 페이지네이션만 scrollToTop), 빈 목록 문구·건수 문구를 `formatAnnouncement`로 이동. **검증**: 빌드 기호 `◐` → **`○` Static**(Revalidate 1h·Expire 1d), 필터·페이지 클릭 5회 네트워크 요청 **각 0건**(Playwright 스크립트), 뒤로가기·직접 진입·Ctrl+클릭 정상. 유닛 348 → 353. **CI 빌드가 처음으로 DB를 읽게 되어 `ci.yml` Build에 `TEST_*` secrets 주입.** **Vercel Preview가 여기서 깨졌다** — Preview 환경에 서버용 두 변수가 없었고 `NEXT_PUBLIC_*`은 프로덕션 값으로 Preview에도 들어가 있었다(= Preview가 그동안 프로덕션 DB를 봄). 네 변수를 Preview 전용으로 `cheong-an-test` 값으로 추가해 해결(ADR 015 결과 절). 규칙: **프로덕션 아닌 모든 자동 실행(CI·E2E·Preview)은 테스트 프로젝트**. 함정: `NEXT_PUBLIC_` 변수를 Secret으로 저장하면 이후 편집 불가 → 삭제 후 Config로 재생성.
+
+**Step c(이 PR)**: 구 서버 조회 경로(`listAnnouncements`·`countAnnouncements`·`applyFilters`·`PGRST103`) 삭제, `AnnouncementFilters` re-export 제거, 태그 주석 근거 정정(constants·크롤 라우트), 필터 클릭 E2E(요청 0건 단언), 학습 문서 `step106-client-side-filtering.md`, `step83-cache-components.md` 포인터, ADR 015 결과 보강.
+
+**공공 공고 1건 확인(2026-09-04)**: "public 공고가 사라졌다"는 의문에 세 지점(프로덕션 DB·배포 페이지·원본 soco 목록 12페이지)을 대조 — 전부 6624 1건으로 일치. 원본도 최근 120건 중 공공 1건(SH 공공임대는 연 1~2회 일괄 공고). 부트스트랩 시작(6562, 06-11) 이전의 1차 공고는 수집 범위 밖(ADR 005). 결함 아님.
+
 ### ✅ 완료 — 공고 상세 페이지 + 링크 내부 일원화 (#96·#98, 2026-09-04 이슈 닫음)
 
 **#96**(상세 페이지 + URL 일원화, PR #97) **· #98**(원본 공고 링크, PR #99) 머지. 유닛 294 → **310**.
@@ -41,14 +57,13 @@
 
 **Sprint 2 잔여는 UI 디자인 일괄 작업 1건이다.** 마일스톤(MVP 경로)은 달성했지만 Sprint 종료는 아니므로 **회고는 잔여 완료 후**에 쓴다. 다만 이와 별개로 **ADR 015(목록 데이터 전달 모델 전환)가 진행 중**이니, Sprint 2 종료 시점은 그 작업의 편입 여부에 따라 정한다.
 
-**다음 작업 순서**: ~~① `'use cache: remote'` 캐시 적중 확인~~(2026-09-02 완료) → ~~① #86~~(2026-09-03 완료) → ~~① 상세 페이지~~(2026-09-04 완료 — 위 #96·#98 섹션) → **① UI 디자인** → ② 회고.
+**다음 작업 순서**: ~~① `'use cache: remote'` 캐시 적중 확인~~(2026-09-02 완료) → ~~① #86~~(2026-09-03 완료) → ~~① 상세 페이지~~(2026-09-04 완료 — 위 #96·#98 섹션) → **① #106 Step c 머지**(위 진행 중 섹션) → ② UI 디자인 → ③ 회고.
 
-**열려 있는 후속 이슈 4건**(전부 진행을 막지 않음, 착수 시점 미정):
+**열려 있는 후속 이슈 3건**(전부 진행을 막지 않음, 착수 시점 미정). ~~#101~~은 PR #105로 닫혔다.
 
 | 이슈 | 내용                                               | 성격                                               |
 | ---- | -------------------------------------------------- | -------------------------------------------------- |
 | #100 | 없는 공고 상세가 404 대신 200 (soft 404)           | PPR 구조의 대가. 고치면 static shell을 잃는다      |
-| #101 | 목록 → 상세 이동 E2E 없음                          | ADR 015가 목록을 바꾸기 전에 있으면 안전망이 된다  |
 | #102 | 크롤 스케줄이 설정(매시)과 달리 2~4시간 간격       | **서비스 전제와 어긋남**. 알림 지연이 곧 가치 손실 |
 | #103 | `NEXT_PUBLIC_SITE_URL` → `SITE_URL` (서버 전용 값) | 명명 정합성. 우선순위 낮음                         |
 

@@ -8,6 +8,8 @@
 
 청안 고유 판단(왜 이 전환을 택했는지, 선택지 비교, 배제한 접근)은 `docs/adr/013-cache-components-rendering-model.md` 소관이다.
 
+> **후속(#106, ADR 015)**: 이 문서는 "`searchParams`를 Suspense 아래에서 읽고 조합별로 `remote` 캐시한다"는 모델을 다룬다. 목록 페이지는 이후 **`searchParams`를 서버에서 읽지 않고 전량을 static shell에 임베드해 브라우저가 고르는** 모델로 바뀌었다. §1~§3의 설명은 그대로 유효하지만 목록 페이지의 현재 코드는 §3의 "앞에 있다 → `'use cache'`" 분기에 해당한다. 그 전환의 보편 패턴은 [`step106-client-side-filtering.md`](./step106-client-side-filtering.md), 판단은 ADR 015.
+
 ---
 
 ## 1. 문제 — `searchParams`는 request-time API다
@@ -320,7 +322,7 @@ expect(revalidateTag).not.toHaveBeenCalled(); // 변경 0건 / 쓰기 실패 시
 
 - `searchParams`는 request-time API다. 기본 설정에서 읽으면 **라우트 전체가 동적**이 되고, 조회가 `fetch`가 아니면 Data Cache 폴백도 없다.
 - Cache Components는 판정을 **트리 단위**로 내린다. 실무 규칙은 하나 — **페이지를 async로 만들지 말고 promise를 Suspense 아래로 내려보낸다.** await를 아래로 미룰수록 정적으로 남는 부분이 커진다.
-- 캐시 디렉티브는 **그 호출이 request-time 데이터 뒤에 있는가**로 고른다. 뒤에 있으면 인메모리는 서버리스에서 적중하지 않으므로 `remote`를 고려한다. 캐시 키 공간이 작아야 적중률이 산다.
+- 캐시 디렉티브는 **그 호출이 request-time 데이터 뒤에 있는가**로 고른다. 뒤에 있으면 인메모리는 서버리스에서 적중하지 않으므로 `remote`를 고려한다. 캐시 키 공간이 작아야 적중률이 산다. 다만 **"뒤에 있어야 하는가"를 먼저 물어라** — 데이터가 작고 주기 갱신이면 request-time 값을 서버에서 읽지 않고 전량을 shell에 실어 브라우저가 고르는 쪽이 왕복 자체를 없앤다(`step106-client-side-filtering.md`).
 - 쿼리 조합이 있으면 **경로 무효화는 무력하다.** `cacheTag` + `revalidateTag(tag, ...)`로 옮긴다. 두 번째 인자가 의미를 바꾸고, 단일 인자 호출은 deprecated다. `'max'`는 권장값이지만 **낡은 내용을 내보낸다** — 알림과 연동된 화면에는 `{ expire: 0 }`.
 - `dynamic`·`revalidate` 세그먼트 설정은 **금지**된다. 동적 실행은 request-time 접근이, 캐시 수명은 `cacheLife`가 대신한다.
 - **동적 세그먼트(`params`)도 같은 규칙이다.** 경로 값이라고 특별 취급되지 않는다. `generateStaticParams`는 PPR shell과 무관한 별개 최적화이므로, id 집합이 계속 늘어나면 쓰지 않는 편이 단순하다. 경로 세그먼트는 무시할 수 없으니 파싱 실패는 404이고, `Number()` 앞에 정규식을 둬야 `' 12 '`·`'1.2e1'` 같은 입력이 새지 않는다.
