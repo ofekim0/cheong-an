@@ -1,8 +1,12 @@
 /**
  * 크롤링 트리거 엔드포인트 (#13).
  *
- * 호출자: GitHub Actions scheduled workflow (ADR 004).
- *   `curl --fail -H "Authorization: Bearer $CRON_SECRET" $DEPLOY_URL/api/cron/crawl`
+ * 호출자:
+ *   - 정기: cron-job.org가 매시 17분에 GET 호출 (ADR 017, ADR 004 대체).
+ *   - 수동: GitHub Actions `Crawl` 워크플로의 workflow_dispatch.
+ *   둘 다 `Authorization: Bearer $CRON_SECRET` 헤더로 호출한다.
+ *   서버 측 잠금이 없으므로 두 호출이 겹치면 같은 공고가 중복 발송된다 —
+ *   정기 트리거는 하나만 둔다.
  *
  * 흐름:
  *   1. Bearer 토큰 검증 (CRON_SECRET).

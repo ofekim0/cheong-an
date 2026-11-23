@@ -1,5 +1,7 @@
 # Step 8: GitHub Actions cron + Vercel Route Handler 트리거 — 학습 정리
 
+> **2026-11 갱신**: 청안의 정기 실행은 cron-job.org로 이전했다([ADR 017](../adr/017-external-cron-scheduler.md), #102). GHA `schedule`이 best-effort라 매시 설정이 하루 3~8회만 발화했기 때문이다. 이 문서의 GHA `schedule` 내용은 작성 시점 기록으로 남기며, 현재 GHA 워크플로는 `workflow_dispatch`(수동 실행) 전용이다. "스케줄러와 핸들러의 분리"(§2) 덕분에 호출자만 바꾸고 핸들러는 손대지 않았다.
+
 > 외부 스케줄러에서 배포된 앱의 엔드포인트를 주기적으로 호출하는 패턴.
 > 다른 프로젝트에도 그대로 적용 가능한 보편 패턴만 정리한다.
 > 청안의 구체적 판단(왜 GHA를 골랐는지, 왜 1시간 간격인지)은 [ADR 004](../adr/004-scheduler-choice.md) 참고.

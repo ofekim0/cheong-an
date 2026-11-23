@@ -1,8 +1,10 @@
 name: Crawl
 
+# 정기 실행은 cron-job.org가 매시 17분에 /api/cron/crawl을 호출한다 (ADR 017).
+# GHA `schedule`은 best-effort라 하루 3~8회만 발화해 제거했다 (#102).
+# 이 워크플로는 수동 실행(Run workflow) 전용 비상 트리거로 남긴다.
+# cron-job.org 호출은 아래 concurrency 그룹 밖이므로 매시 17분 부근에는 수동 실행을 피한다.
 on:
-  schedule:
-    - cron: '0 * * * *'
   workflow_dispatch:
 
 concurrency:
