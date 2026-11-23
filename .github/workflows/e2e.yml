@@ -12,7 +12,10 @@ concurrency:
 
 jobs:
   e2e:
-    runs-on: ubuntu-latest
+    # ubuntu-latest가 26.04로 올라가면서 Playwright 1.58이 chromium 설치를 거부한다
+    # ("does not support chromium on ubuntu26.04-x64"). Playwright가 26.04를 지원하는
+    # 버전으로 올라갈 때까지 24.04로 고정한다.
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout
         uses: actions/checkout@v4
