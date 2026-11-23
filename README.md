@@ -58,9 +58,11 @@ pnpm build
 ### 크롤링 스케줄러 (#13)
 
 1시간 간격으로 `/api/cron/crawl`을 호출해 새 공고를 수집한다.
-스케줄러는 GitHub Actions(`.github/workflows/crawl.yml`)에서 동작하며,
+스케줄러는 외부 cron 서비스 [cron-job.org](https://cron-job.org)이며(매시 17분),
 배포된 Vercel 엔드포인트를 `Authorization: Bearer $CRON_SECRET`으로 트리거한다.
-근거는 [ADR 004](./docs/adr/004-scheduler-choice.md).
+실패 시 cron-job.org가 이메일로 알린다.
+근거는 [ADR 017](./docs/adr/017-external-cron-scheduler.md)
+(이전 GitHub Actions 스케줄은 하루 3~8회만 발화해 대체 — [ADR 004](./docs/adr/004-scheduler-choice.md), #102).
 
 #### 시크릿 등록 (최초 1회)
 
@@ -72,8 +74,11 @@ pnpm build
 | Vercel 환경변수 | `NEXT_PUBLIC_SITE_URL`      | 배포 URL (예: `https://cheong-an.vercel.app`)        |
 | GitHub Secrets  | `CRON_SECRET`               | **Vercel과 동일 값**                                 |
 | GitHub Secrets  | `DEPLOY_URL`                | Vercel 배포 URL (예: `https://cheong-an.vercel.app`) |
+| cron-job.org    | 요청 헤더 `Authorization`   | `Bearer <CRON_SECRET>` (Vercel과 동일 값)            |
 
-토큰 불일치 호출은 401로 거부된다. `CRON_SECRET`을 회전하면 두 곳을 함께 갱신한다.
+cron-job.org 작업 설정: URL `https://<배포 도메인>/api/cron/crawl`, 일정 `17 * * * *`, method `GET`, 응답 저장(Save responses in job history)과 실패 알림 켜기. "Requires HTTP authentication"(Basic 인증)은 쓰지 않는다.
+
+토큰 불일치 호출은 401로 거부된다. `CRON_SECRET`을 회전하면 Vercel·GitHub Secrets·cron-job.org **세 곳을 함께** 갱신한다.
 
 `NEXT_PUBLIC_SITE_URL`은 알림(웹 푸시·이메일)이 보내는 공고 링크의 절대 URL을 만드는 데 쓴다(#96). 등록 시 유의할 점 셋:
 
@@ -85,7 +90,8 @@ pnpm build
 
 #### 수동 트리거
 
-GitHub Actions의 `Crawl` 워크플로우에서 **Run workflow** 버튼으로 즉시 실행 가능.
+GitHub Actions의 `Crawl` 워크플로우에서 **Run workflow** 버튼으로 즉시 실행 가능(cron-job.org 장애 시 비상용).
+정기 호출과 겹치면 같은 공고가 중복 발송되므로 매시 17분 부근은 피한다.
 
 #### 로컬 트리거
 
