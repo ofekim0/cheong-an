@@ -15,7 +15,18 @@
 - **디자인 훅·CI 게이트는 보류했다.** CI(`detect --sarif`)는 #111 Step d 머지 후 건다. 훅은 수동 `detect`를 잊는 일이 생기면 켠다(ADR 018 승격 조건).
 - **시범 실행에서 결함 1건을 찾았다**: `globals.css`의 `body { font-family: Arial }`이 `next/font`로 로드한 Geist를 덮어써서, Geist는 다운로드만 되고 쓰이지 않는다. **따로 고치지 않고 #111 Step a로 넘겼다**(아래 #111 섹션). 렌더 스캔에서는 페이지네이션 비활성 버튼 대비 1.5:1이 1건 나왔는데, WCAG 1.4.3의 비활성 컴포넌트 예외라 위반이 아니다.
 - **함정(Windows)**: 렌더 스캔용 dev 서버를 Git Bash(`/c/...` 경로)에서 띄우면 Turbopack이 모든 경로를 404로 응답한다. **PowerShell(`C:\...`)에서 띄운다.**
-- **남은 일**: `/impeccable init`으로 `PRODUCT.md`를 작성한다(지금 가능). 이것까지 끝나면 #114를 닫는다. `DESIGN.md`는 #111 Step a 머지 후에 작성한다.
+
+**적용 순서**(근거는 ADR 018 결과 절, #111 연결 지점은 아래 #111 섹션):
+
+1. ~~설치(훅 거절)~~ → ~~`.gitignore`·픽스처 제외~~ → ~~ADR 018~~ (PR #115, 2026-11-27 완료)
+2. **`/impeccable init` → `PRODUCT.md`**. 지금 가능하고 디자인 교체와 무관하다. 커밋하면 **#114를 닫는다**.
+3. **#111 Step a 이식**: Pretendard를 주입할 때 `globals.css`의 `body` Arial 선언을 정리하고, `npx impeccable detect src/`로 `overused-font`가 사라졌는지 확인한다.
+4. **Step a 머지 후 `/impeccable document` → `DESIGN.md`**. 이후 `typeset`·`layout` 같은 명령이 새 토큰을 기준으로 동작한다.
+5. **#111 Step b~d**: 각 Step을 이식한 뒤 해당 화면을 렌더 스캔(`detect http://localhost:3000/...`, PowerShell에서 띄운 dev 서버)하고 `/impeccable critique`·`audit <화면>`으로 확인한다. 기준은 v0 프롬프트의 접근성 요구(대비 AA, 선택 상태를 형태로도 구분)다. WCAG 예외로 판단한 검출은 `npx impeccable ignores add-value` 또는 인라인 주석에 사유를 남긴다.
+6. **Step d 머지 후 CI 게이트**: `ci.yml`에 `detect --sarif` → `upload-sarif`(code scanning)를 붙인다. 이 시점에 ADR 018을 "수락됨"으로 바꾼다.
+7. **(조건부) 디자인 훅**: 에이전트에게 UI 편집을 맡기다 수동 `detect`를 잊는 일이 생기면 `/impeccable hooks on`.
+
+쓰지 않는 것: `bolder`·`overdrive`·`live`·`generate` 같은 생성 명령(v0와 역할이 겹친다). 특히 `live`의 Apply는 채팅 세션이 없으면 권한 우회 모드로 CLI를 실행한다(ADR 018 주의 사항).
 
 ### 🔄 관찰 중 — 크롤 스케줄러 이전 (#102, ADR 017, PR #113 머지 2026-11-23)
 
