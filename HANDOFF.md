@@ -5,7 +5,53 @@
 
 ---
 
-## 0. 최신 상태 (2026-09-04 기준)
+## 0. 최신 상태 (2026-11-27 기준)
+
+### ✅ 완료 — UI 디자인 품질 검증 도구 Impeccable 도입 (#114, ADR 018, PR #115 머지 2026-11-27)
+
+**UI 결과물을 검증하는 도구로 [Impeccable](https://github.com/pbakaus/impeccable)(v4.11.1)을 프로젝트 범위에 설치했다.** #111은 v0가 디자인을 **생성**하고 ADR 016의 shadcn/ui가 컴포넌트 기반을 맡는데, 결과물을 **검증**할 수단이 없었다. Impeccable은 그 결과를 재는 역할만 한다. 디자인을 새로 만드는 명령(`bolder`·`overdrive`·`live`)은 v0와 겹쳐서 쓰지 않는다. 근거와 선택지(수동 검토 / axe·Lighthouse / 전면 도입 / 단계적 도입 채택)는 **ADR 018**이 단일 출처다.
+
+- **설치 산출물은 커밋하지 않는다.** `.claude/skills/impeccable/`·`.claude/agents/impeccable-*.md`(68개 파일)는 `.gitignore` 처리했다. 새 환경에서는 `npx impeccable install --providers=claude --scope=project`로 재설치하고 훅 질문에 `n`을 입력한다. 커밋하는 것은 프로젝트 설정 `.impeccable/config.json`뿐이다(크롤러 픽스처 `src/lib/crawler/__fixtures__/**` 검출 제외).
+- **디자인 훅·CI 게이트는 보류했다.** CI(`detect --sarif`)는 #111 Step d 머지 후 건다. 훅은 수동 `detect`를 잊는 일이 생기면 켠다(ADR 018 승격 조건).
+- **시범 실행에서 결함 1건을 찾았다**: `globals.css`의 `body { font-family: Arial }`이 `next/font`로 로드한 Geist를 덮어써서, Geist는 다운로드만 되고 쓰이지 않는다. **따로 고치지 않고 #111 Step a로 넘겼다**(아래 #111 섹션). 렌더 스캔에서는 페이지네이션 비활성 버튼 대비 1.5:1이 1건 나왔는데, WCAG 1.4.3의 비활성 컴포넌트 예외라 위반이 아니다.
+- **함정(Windows)**: 렌더 스캔용 dev 서버를 Git Bash(`/c/...` 경로)에서 띄우면 Turbopack이 모든 경로를 404로 응답한다. **PowerShell(`C:\...`)에서 띄운다.**
+
+**적용 순서**(근거는 ADR 018 결과 절, #111 연결 지점은 아래 #111 섹션):
+
+1. ~~설치(훅 거절)~~ → ~~`.gitignore`·픽스처 제외~~ → ~~ADR 018~~ (PR #115, 2026-11-27 완료)
+2. **`/impeccable init` → `PRODUCT.md`**. 지금 가능하고 디자인 교체와 무관하다. 커밋하면 **#114를 닫는다**.
+3. **#111 Step a 이식**: Pretendard를 주입할 때 `globals.css`의 `body` Arial 선언을 정리하고, `npx impeccable detect src/`로 `overused-font`가 사라졌는지 확인한다.
+4. **Step a 머지 후 `/impeccable document` → `DESIGN.md`**. 이후 `typeset`·`layout` 같은 명령이 새 토큰을 기준으로 동작한다.
+5. **#111 Step b~d**: 각 Step을 이식한 뒤 해당 화면을 렌더 스캔(`detect http://localhost:3000/...`, PowerShell에서 띄운 dev 서버)하고 `/impeccable critique`·`audit <화면>`으로 확인한다. 기준은 v0 프롬프트의 접근성 요구(대비 AA, 선택 상태를 형태로도 구분)다. WCAG 예외로 판단한 검출은 `npx impeccable ignores add-value` 또는 인라인 주석에 사유를 남긴다.
+6. **Step d 머지 후 CI 게이트**: `ci.yml`에 `detect --sarif` → `upload-sarif`(code scanning)를 붙인다. 이 시점에 ADR 018을 "수락됨"으로 바꾼다.
+7. **(조건부) 디자인 훅**: 에이전트에게 UI 편집을 맡기다 수동 `detect`를 잊는 일이 생기면 `/impeccable hooks on`.
+
+쓰지 않는 것: `bolder`·`overdrive`·`live`·`generate` 같은 생성 명령(v0와 역할이 겹친다). 특히 `live`의 Apply는 채팅 세션이 없으면 권한 우회 모드로 CLI를 실행한다(ADR 018 주의 사항).
+
+### 🔄 관찰 중 — 크롤 스케줄러 이전 (#102, ADR 017, PR #113 머지 2026-11-23)
+
+**크롤 정기 실행을 GitHub Actions `schedule`에서 cron-job.org(매시 17분)로 옮겼다.** GHA `schedule`이 best-effort라 매시 설정이 실제로는 하루 3~8회만 발화했다(2026-11 실측: 최근 15회 간격 3시간 59분 ~ 8시간 58분, 전 회차 `success` — 실패가 아니라 미발화). 새 공고 알림이 최대 9시간 늦게 나가고 있었고 아무 신호도 없었다. 근거·선택지(Vercel Cron은 Hobby에서 여전히 하루 1회, Supabase `pg_cron`+`pg_net`은 차선책)는 **ADR 017**이 단일 출처.
+
+- **바뀐 것은 "누가 호출하는가" 하나** — `/api/cron/crawl`·`CRON_SECRET` Bearer 인증·응답 계약은 그대로. `crawl.yml`은 `schedule`을 지우고 `workflow_dispatch`(수동 비상 트리거)만 남겼다.
+- **정기 트리거는 하나만 둔다.** 라우트에 서버 측 잠금이 없어 두 호출이 겹치면 같은 공고가 중복 발송된다. cron-job.org 호출은 GHA `concurrency` 그룹 밖이므로 **수동 실행은 매시 17분 부근을 피한다.**
+- **`CRON_SECRET`은 이제 세 곳**(Vercel·GitHub Secrets·cron-job.org 요청 헤더). 회전 시 함께 갱신. cron-job.org 설정값은 README "크롤링 스케줄러".
+- **머지 전 검증**: 2026-11-23 16:17 KST 회차 200 OK, 같은 시각 GHA 실행 없음으로 출처 교차 확인.
+- **남은 일 — 관찰 후 마무리**: 며칠간 cron-job.org 이력으로 **하루 약 24회·간격 약 1시간**을 확인한 뒤 #102를 실측 근거와 함께 닫고 ADR 017 → "수락됨", ADR 004 → "대체됨". 미충족이면 ADR 017 선택지 D(`pg_cron`)로.
+- **관찰 항목**: cron-job.org 요청 타임아웃(30초로 알려짐)과 신규 공고가 많은 회차의 소요 시간(평소 10~25초). 끊겼을 때 Vercel 함수가 끝까지 실행되는지는 미확인(ADR 017 결과 절).
+
+**같은 PR에서 드러난 환경 문제 2건**(코드 원인 아님):
+
+1. **테스트 Supabase(`cheong-an-test`) 자동 일시정지 재발** — 9월 이후 PR이 없어 멈춰 CI 빌드·Vercel Preview가 `fetch failed`(`ENOTFOUND`)로 실패. Resume 직후 몇 분은 DNS는 풀려도 **Cloudflare 521**이 난다 — 실제 조회(`/rest/v1/announcements` + service role)가 200이 된 뒤 재실행해야 한다. 오래 쉰 뒤 PR을 올릴 때는 먼저 Resume.
+2. **E2E 러너 `ubuntu-24.04` 고정** — `ubuntu-latest`가 26.04로 바뀌면서 Playwright 1.58이 `does not support chromium on ubuntu26.04-x64`로 설치를 거부했다. **임시 조치**이고, Playwright를 26.04 지원 버전으로 올리면 되돌린다(`e2e.yml` 주석). `ci.yml`·`crawl.yml`은 Playwright를 쓰지 않아 `ubuntu-latest` 유지.
+
+### ⏸ 진행 중 — UI 디자인 일괄 적용 (#111, 2026-09-07 착수)
+
+**Step a의 문서만 작성됐고 아직 머지되지 않았다** — 브랜치 `feat/111-ui-design-a`(origin push, PR 없음)에 `88a65ef` v0 프롬프트 초안(`docs/design/v0-prompt.md`) + **ADR 016**(shadcn/ui 도입) 과 `6157a14` PROJECT_PLAN(Could Have "가까운 지하철역 표시", Won't Have 절 신설)·v0 프롬프트 보강. 코드 이식(shadcn 초기화·토큰·Pretendard·헤더·레이아웃)은 미착수. **다음 행동은 v0 생성**(사용자 작업 — `v0-prompt.md` "절차" 1~4) → Step a 이식 → b(홈·목록) → c(상세) → d(구독). Sprint 3 지역구·유형 필터는 Step b·d에서 **마크업 자리만** 두고 동작은 Sprint 3에서 붙인다(UI 틀을 먼저 잡는 순서로 확정, 2026-11-23).
+
+- **#112**(2026-09-07 등록): 홈 카드용 단지 사진·지하철역을 "주택찾기" 페이지에서 수집. #111 디자인이 사진 자리·지하철역 줄을 유지하고 데이터 없이 자리표시 상태로 먼저 배포하므로 **#111을 막지 않는다.**
+- `6157a14`의 커밋 메시지가 컨벤션(`docs: ...`) 밖이다 — PR squash 시 제목으로 맞춘다.
+- **Impeccable 검증 연결(ADR 018)**: Step a에서 Pretendard를 주입할 때 `globals.css`의 `body` Arial 선언을 정리하고, `npx impeccable detect src/`로 `overused-font` 검출이 사라졌는지 확인한다. **Step a 머지 후** `/impeccable document`로 `DESIGN.md`를 작성한다(그 전에 작성하면 교체될 템플릿 기본값이 기록된다). 각 Step을 이식한 뒤에는 해당 화면의 렌더 스캔(`detect http://localhost:3000/...`)과 `critique`/`audit`로 v0 프롬프트의 접근성 요구(대비 AA, 선택 상태를 형태로도 구분)를 확인한다.
+- **ADR 번호**: 브랜치의 ADR 016이 머지 전이라 Impeccable ADR은 018로 건너뛰었다. 016을 머지할 때 번호가 충돌하지 않는다.
 
 ### ✅ 완료 — 목록 데이터 전달 모델 전환 (#106, ADR 015, 2026-09-04 이슈 닫음)
 
@@ -59,15 +105,18 @@
 
 **Sprint 2 잔여는 UI 디자인 일괄 작업 1건이다.** 마일스톤(MVP 경로)은 달성했지만 Sprint 종료는 아니므로 **회고는 잔여 완료 후**에 쓴다. ADR 015(목록 데이터 전달 모델 전환, #106)는 2026-09-04 완료됐다 — Sprint 2 편입 여부는 회고 작성 시 정리한다(계획에 없던 성능 작업이 Sprint 중간에 들어온 경위 포함).
 
-**다음 작업 순서**: ~~① `'use cache: remote'` 캐시 적중 확인~~(2026-09-02 완료) → ~~① #86~~(2026-09-03 완료) → ~~① 상세 페이지~~(2026-09-04 완료 — 위 #96·#98 섹션) → ~~① #106 Step c 머지~~(2026-09-04 완료 — 위 #106 섹션) → **① UI 디자인**(착수 시 Issue 생성) → ② 회고.
+**다음 작업 순서**: ~~① `'use cache: remote'` 캐시 적중 확인~~(2026-09-02 완료) → ~~① #86~~(2026-09-03 완료) → ~~① 상세 페이지~~(2026-09-04 완료 — 위 #96·#98 섹션) → ~~① #106 Step c 머지~~(2026-09-04 완료 — 위 #106 섹션) → **① UI 디자인 #111**(2026-09-07 착수, Step a 문서 단계 — 위 "⏸ 진행 중") → ② 회고. 병행: **#102 관찰 후 마무리**(위 "🔄 관찰 중"), **#114 `PRODUCT.md` 작성**(위 Impeccable 섹션).
 
-**열려 있는 후속 이슈 3건**(전부 진행을 막지 않음, 착수 시점 미정). ~~#101~~은 PR #105로 닫혔다.
+**열려 있는 이슈**(2026-11-27 기준). ~~#101~~은 PR #105로 닫혔다.
 
-| 이슈 | 내용                                               | 성격                                               |
-| ---- | -------------------------------------------------- | -------------------------------------------------- |
-| #100 | 없는 공고 상세가 404 대신 200 (soft 404)           | PPR 구조의 대가. 고치면 static shell을 잃는다      |
-| #102 | 크롤 스케줄이 설정(매시)과 달리 2~4시간 간격       | **서비스 전제와 어긋남**. 알림 지연이 곧 가치 손실 |
-| #103 | `NEXT_PUBLIC_SITE_URL` → `SITE_URL` (서버 전용 값) | 명명 정합성. 우선순위 낮음                         |
+| 이슈 | 내용                                               | 성격                                                        |
+| ---- | -------------------------------------------------- | ----------------------------------------------------------- |
+| #111 | UI 디자인 일괄 적용 (v0)                           | Sprint 2 마지막 항목. Step a 문서 단계                      |
+| #114 | Impeccable 디자인 품질 검증 도구 도입              | **PR #115 머지** — `PRODUCT.md` 작성 후 닫음                |
+| #112 | 주택찾기 페이지 크롤로 단지 사진·지하철역 수집     | #111 홈 카드 데이터. #111을 막지 않음(자리표시로 먼저 배포) |
+| #102 | 크롤 스케줄이 설정(매시)과 달리 하루 3~8회만 실행  | **PR #113 머지(cron-job.org 이전)** — 관찰 후 닫음          |
+| #100 | 없는 공고 상세가 404 대신 200 (soft 404)           | PPR 구조의 대가. 고치면 static shell을 잃는다               |
+| #103 | `NEXT_PUBLIC_SITE_URL` → `SITE_URL` (서버 전용 값) | 명명 정합성. 우선순위 낮음                                  |
 
 **Step c-3 완료·머지**(PR #91, 2026-09-02) **— 필터 UI**. 공고 유형·모집 구분을 URL 쿼리(`?type=`·`?recruitment=`)로 걸고, `AnnouncementFilterBar`(서버 컴포넌트 + 링크, JS 0)로 노출한다. 파싱은 `src/lib/announcements/parseListParams.ts`로 분리해 테스트를 붙였다(`parsePageParam`도 c-2의 페이지 파일에서 여기로 이동) — 공개 쿼리스트링은 누구나 바꿀 수 있어 "잘못된 입력을 어떻게 다루는가"가 곧 방어선이고, 원칙은 **모르는 값은 무시**(제약 없음으로 취급, 400·500 아님)다. enum이라 화이트리스트로 닫아 검증하고 배열로 온 값은 첫 값만 쓴다. **필터 변경 시 `page`를 버리고, 페이지 이동 시 필터는 유지한다**(`baseParams`) — 전자를 유지하면 4페이지에서 필터를 걸었을 때 빈 화면이 뜬다. 빈 목록 문구는 셋으로 갈랐다(조건 불일치 / 페이지 범위 초과 / 진짜 0건 — 사용자가 취할 행동이 각각 다르다). 유닛 261 → 294. 학습 문서·ADR 없음 — c-2 패턴의 적용이고 ADR 013이 이미 "c-3은 인자 추가로 끝난다"까지 적어뒀다. 프로덕션 스모크로 집계 정합 확인(공공 1 + 민간 68 = 69, 최초 13 + 추가 56 = 69).
 
@@ -84,7 +133,7 @@
 **⚠️ 아래 두 문단은 c-2가 대체했다 — 되살리지 말 것** (경위는 ADR 013 "배제한 접근"):
 
 - ~~**ISR은 시간 기반 + 온디맨드 병행**(페이지 `revalidate = 3600` 상한 + cron의 `revalidatePath(ANNOUNCEMENTS_PATH)`)~~ → **세그먼트 설정은 `cacheComponents`와 비호환이라 제거**했고, 무효화는 태그 기반(`revalidateTag`)으로 옮겼다. 다만 **호출 시점 규칙은 그대로 유효**하다: `upsert`·`lastBoardId` 갱신 완료 후 발송 전(저장 전이면 낡은 상태를 캐시에 굳히고, 발송 뒤면 발송 지연만큼 웹 반영이 밀린다), **신규 0건이면 미호출**(평시 크롤 대부분이 이 경로). 태그 문자열도 경로와 같은 이유로 `src/constants/announcements.ts`에서 공유한다 — 어긋나면 조용히 실패한다.
-- ~~**ISR 페이지는 빌드 중에 DB를 부르므로 자격 증명 가드가 필요하다**~~ → PPR에서는 조회가 `searchParams` 뒤에 있어 **빌드가 호출하지 않는다.** 가드는 제거했다. 다만 배제 사유는 유효하다: **CI에 테스트 Supabase 시크릿을 주입하지 말 것** — 빌드가 테스트 DB 가동 상태에 묶여, e2e에서 두 번 겪은 pause → `ENOTFOUND` 적색이 빌드 단계로 번진다.
+- ~~**ISR 페이지는 빌드 중에 DB를 부르므로 자격 증명 가드가 필요하다**~~ → PPR에서는 조회가 `searchParams` 뒤에 있어 **빌드가 호출하지 않는다.** 가드는 제거했다. ~~다만 배제 사유는 유효하다: **CI에 테스트 Supabase 시크릿을 주입하지 말 것**~~ → **#106 Step b(ADR 015)에서 뒤집혔다** — 목록이 빌드 시점에 전량을 임베드하면서 CI Build에 `TEST_*` secrets를 주입했다. 여기서 우려한 대가(테스트 DB pause → 빌드 단계 적색)는 실제로 2026-11-23 PR #113에서 발생했다(위 "🔄 관찰 중" 참조 — Resume 후 재실행).
 
 **브라우저 검증에서 데이터 표기 오류를 발견해 함께 고쳤다.** 초안의 `모집 {시작} ~ {마감}`이 전 카드에서 `~ 미정`으로 나왔고, 추적 결과 DB 68건 전부 `application_end_date`·`result_date`가 null이었다. 원인은 파서 버그가 아니라 **소스에 그 데이터가 없기 때문** — view.do(boardId 6644) 메타 영역의 날짜 항목은 '공고게시일'·'청약신청일' 둘뿐이고 마감일·발표일이 존재하지 않는다. 카드를 **`청약신청 {날짜}` 단일 날짜 표기**로 바꿨다(`applicationEndDate`는 `parseDetailPage`가 항상 null을 반환해 값이 들어올 경로가 없어 렌더하지 않는다). 파생 결함은 **#86으로 분리** — `parseListJson`이 `optn1`(공고게시일)을 `applicationStartDate`로, `optn4`(청약신청일)를 `applicationEndDate`로 매핑한다. 저장 경로가 `parseDetailPage` 출력만 쓰므로(ADR 003 옵션 B) 이 시점에는 잠복 상태였고, 필드명 정정·없는 필드 제거는 스키마 변경이라 별도 판단이 필요했다. **※ 이후 #86에서 3안 전부 해소** — 매핑 정정 + `applicationDate` 리네임 + 부재 필드 제거(2026-09-03, ADR 014 · 위 "✅ 완료 — 공고 날짜 필드 정정"). 이 문단의 `applicationStartDate`·`applicationEndDate`는 더 이상 존재하지 않는 필드명이다.
 
@@ -149,7 +198,7 @@ Sprint 2 1번 작업(웹 푸시 파이프라인, #39)을 Step(9-a~d)으로 쪼�
 | Step 6          | 데이터 소스 재설계: JSON 목록(주) + view.do 하이브리드 (epic #19)                                                                                                                                                                                                                                                                                                                                                | ADR 002/003; PR #20~23·#25                                                                          |
 | Step 6 정리     | `checkBoardId` 모듈 실제 삭제 + 이슈 본문 정리                                                                                                                                                                                                                                                                                                                                                                   | PR #27                                                                                              |
 | Step 7          | Supabase 저장 통합: admin 클라 + `announcements` UPSERT + `crawl_state` 리포                                                                                                                                                                                                                                                                                                                                     | `learning/step7-*`; PR #29·#30                                                                      |
-| Step 8          | 크롤 스케줄러: `/api/cron/crawl` + `crawl.yml` (1h cron + dispatch), `CRON_SECRET` 인증                                                                                                                                                                                                                                                                                                                          | ADR 004; `learning/step8-gha-cron-vercel-trigger`; PR #35                                           |
+| Step 8          | 크롤 스케줄러: `/api/cron/crawl` + `crawl.yml` (1h cron + dispatch), `CRON_SECRET` 인증. **※ 정기 실행은 #102(PR #113)에서 cron-job.org로 이전** — `crawl.yml`은 dispatch 전용                                                                                                                                                                                                                                   | ADR 004(→ 017); `learning/step8-gha-cron-vercel-trigger`; PR #35                                    |
 | Step 8 픽스     | 부트스트랩 catch-up 루프 픽스 — 시드 0이면 latestBoardId만 저장 (#36)                                                                                                                                                                                                                                                                                                                                            | ADR 005; `troubleshooting/2026-06-09-cron-bootstrap-catch-up`                                       |
 | 크롤 동결 픽스  | 동결 해소 (#42): gap-fill 폐기 → 목록 기반 크롤, 페이지네이션 보전, row별 격리. 프로덕션 500→200 검증                                                                                                                                                                                                                                                                                                            | ADR 007; PR #43·#45                                                                                 |
 | Step 9-a        | 웹 푸시 구독 클라 경로 (#39): VAPID 유틸 + SW 등록 + `usePushSubscription` 훅 + 임시 `/subscribe` UI. Chrome E2E 검증                                                                                                                                                                                                                                                                                            | PR #47 (서버 저장 9-b·발송 9-c)                                                                     |
@@ -175,9 +224,10 @@ Sprint 2 1번 작업(웹 푸시 파이프라인, #39)을 Step(9-a~d)으로 쪼�
 | 날짜 필드 b     | 필드명 리네임 + 부재 필드 제거 (#86): `applicationStartDate`→`applicationDate`(DB `application_date`) + `applicationEndDate`·`resultDate` **제거**(마이그레이션 00004 RENAME+DROP). 해명 주석 2블록 삭제, UI 동작 무변경. 18파일 +79/−96. **※ 되살리기 전 ADR 014 필독** — `subscriptionDate`(웹 푸시 구독과 어휘 충돌)·필드 유지·expand-contract 3건을 배제한 근거가 거기 있다                                  | **ADR 014**; PR #94                                                                                 |
 | 상세 페이지     | 공고 상세 + 링크 일원화 (#96): `/announcements/[boardId]`(PPR — `params`를 Suspense 하위에서 읽어 `◐` 확인, `generateStaticParams` 미사용, 캐시 태그는 목록과 공유) + `getAnnouncementByBoardId`(없으면 null, 컬럼 미선별) + `rowToAnnouncement` + `lib/announcements/announcementUrl`(절대 URL, `NEXT_PUBLIC_SITE_URL` 미설정 시 throw) + 카드·알림 링크 내부 전환. `ChannelAdapter` 계약 무변경. 유닛 303      | PR #97; `learning/step83-cache-components` §8 (동적 세그먼트)                                       |
 | 원본 링크       | 상세에 원본 공고 링크 (#98): `buildSourceUrl`(`getSiteUrl()`을 타지 않음 — env 누락이 페이지 렌더를 깨면 안 된다) + 첨부 유무 무관 항상 노출. #96이 평문화로 잃은 표·이미지 접근 경로를 복구. 유닛 310                                                                                                                                                                                                           | PR #99                                                                                              |
+| 스케줄러 이전   | 크롤 정기 실행을 GHA `schedule`(하루 3~8회만 발화) → cron-job.org 매시 17분으로 이전 (#102). 서버 코드 무변경(주석만), `crawl.yml`은 `workflow_dispatch` 전용, 정기 트리거 단일화(중복 발송 방지). 동승: E2E 러너 `ubuntu-24.04` 고정(Playwright 1.58의 26.04 미지원, 임시). **관찰 후 #102 닫음**                                                                                                               | **ADR 017**; PR #113                                                                                |
 | 운영·회고       | Sprint 1 운영 검증 (GHA dispatch 2회 success, `last_board_id` 6561 갱신) + Sprint 1 회고                                                                                                                                                                                                                                                                                                                         | `retrospectives/sprint-1`                                                                           |
 
-> ADR 전체: `docs/adr/` — 001 기술스택, 002/003 데이터소스·매핑, 004 스케줄러, 005 부트스트랩, 006 크롤 출력 검증, 007 크롤 범위, 008 구독 저장 모델(구독 의사/배달 채널 분리), 009 소셜 로그인, 010 E2E 테스트 전략(소유 표면 자동화 + 실 OAuth·FCM 경계), 011 멀티채널 알림 모델(역량 기반 opt-in + 채널 플러그형 발송), 012 목록 파서 row 격리(격리 vs 중단 경계 — 국지적 오입력은 격리, 전면 붕괴는 `LIST_EMPTY`로 중단), 013 목록 페이지 렌더링 모델(Cache Components 전환 + 태그 기반 무효화 — 폐기한 접근 5건 포함), 014 공고 날짜 필드 정정(리네임·부재 필드 제거·마이그레이션 순서 3축 — "소스에 없는 것은 타입이 표현하지 않는다").
+> ADR 전체: `docs/adr/` — 001 기술스택, 002/003 데이터소스·매핑, 004 스케줄러, 005 부트스트랩, 006 크롤 출력 검증, 007 크롤 범위, 008 구독 저장 모델(구독 의사/배달 채널 분리), 009 소셜 로그인, 010 E2E 테스트 전략(소유 표면 자동화 + 실 OAuth·FCM 경계), 011 멀티채널 알림 모델(역량 기반 opt-in + 채널 플러그형 발송), 012 목록 파서 row 격리(격리 vs 중단 경계 — 국지적 오입력은 격리, 전면 붕괴는 `LIST_EMPTY`로 중단), 013 목록 페이지 렌더링 모델(Cache Components 전환 + 태그 기반 무효화 — 폐기한 접근 5건 포함), 014 공고 날짜 필드 정정(리네임·부재 필드 제거·마이그레이션 순서 3축 — "소스에 없는 것은 타입이 표현하지 않는다"), 015 목록 데이터 전달 모델(static shell 임베드 + 클라이언트 필터링, 성장 트리거), 016 shadcn/ui 도입(#111 — `feat/111-ui-design-a` 브랜치, 미머지), 017 크롤 스케줄러 외부 cron 이전(004 대체 예정 — 트리거 단일화·관찰 기준).
 
 ### Sprint 1 완료 — 다음 Sprint 2 시작 준비
 
@@ -185,7 +235,7 @@ Sprint 2 1번 작업(웹 푸시 파이프라인, #39)을 Step(9-a~d)으로 쪼�
 
 ### 다음 할 일 — Sprint 2 (PROJECT_PLAN 4-1 참조)
 
-**웹 푸시 파이프라인 (#39) 완료** — 9-a~d 전부 머지. 9-d(E2E 자동화)는 9-d-a(#61 세션 주입 하네스 + 게이팅) / 9-d-b(#62 구독·해제 + RLS 거부) / 9-d-c(#63 발송 채널 실 DB e2e + GHA e2e 편입)로 3분할 완료. 소유 표면만 자동화하고 실 OAuth·실 FCM 배달은 수동 스모크로 남긴 경계는 ADR 010. 프로덕션은 VAPID env 주입 완료로 매시간 GHA cron이 실운영 발송 중.
+**웹 푸시 파이프라인 (#39) 완료** — 9-a~d 전부 머지. 9-d(E2E 자동화)는 9-d-a(#61 세션 주입 하네스 + 게이팅) / 9-d-b(#62 구독·해제 + RLS 거부) / 9-d-c(#63 발송 채널 실 DB e2e + GHA e2e 편입)로 3분할 완료. 소유 표면만 자동화하고 실 OAuth·실 FCM 배달은 수동 스모크로 남긴 경계는 ADR 010. 프로덕션은 VAPID env 주입 완료로 실운영 발송 중(정기 크롤 트리거는 2026-11-23부터 cron-job.org — ADR 017).
 
 다음은 **Sprint 2 나머지**(아래):
 
