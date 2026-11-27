@@ -1,0 +1,7 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": ["src/lib/crawler/__fixtures__/**"],
+    "ignoreValues": []
+  }
+}
